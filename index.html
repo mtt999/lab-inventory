@@ -1153,9 +1153,14 @@ function uploadRoomPhoto(roomId, roomName) {
   openModal(`
     <div style="font-weight:600;font-size:16px;margin-bottom:8px;">Upload room photo</div>
     <div style="font-size:14px;color:var(--text2);margin-bottom:20px;">${roomName}</div>
-    <div class="field">
-      <label>Choose image (jpg, png)</label>
-      <input type="file" id="room-photo-input" accept="image/*" style="padding:8px;" />
+    <div id="room-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:28px;text-align:center;cursor:pointer;margin-bottom:12px;transition:all 0.15s;">
+      <div style="font-size:28px;margin-bottom:8px;">🖼️</div>
+      <div style="font-size:14px;font-weight:500;color:var(--text2);margin-bottom:4px;">Drag & drop image here</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">or</div>
+      <label style="display:inline-block;padding:7px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;background:var(--surface);">
+        Browse file
+        <input type="file" id="room-photo-input" accept="image/*" style="display:none;" />
+      </label>
     </div>
     <div id="room-photo-preview-wrap" style="display:none;margin-bottom:16px;text-align:center;">
       <img id="room-photo-preview" style="max-width:100%;max-height:180px;border-radius:var(--radius);border:1px solid var(--border);" />
@@ -1166,15 +1171,23 @@ function uploadRoomPhoto(roomId, roomName) {
       <button class="btn" onclick="closeModal()">Cancel</button>
     </div>`);
 
-  document.getElementById('room-photo-input').addEventListener('change', async function() {
-    const file = this.files[0]; if (!file) return;
+  async function handleRoomFile(file) {
+    if (!file || !file.type.startsWith('image/')) { toast('Please use an image file.'); return; }
     const compressed = await compressImage(file, 800, 0.8);
     window._roomPhotoBlob = compressed;
-    const url = URL.createObjectURL(compressed);
-    document.getElementById('room-photo-preview').src = url;
+    document.getElementById('room-photo-preview').src = URL.createObjectURL(compressed);
     document.getElementById('room-photo-size-label').textContent = 'Size: ' + Math.round(compressed.size/1024) + ' KB';
     document.getElementById('room-photo-preview-wrap').style.display = 'block';
-  });
+    document.getElementById('room-drop-zone').style.borderColor = 'var(--accent)';
+    document.getElementById('room-drop-zone').style.background = 'var(--accent-light)';
+  }
+
+  document.getElementById('room-photo-input').addEventListener('change', function() { handleRoomFile(this.files[0]); });
+
+  const dz = document.getElementById('room-drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor='var(--accent)'; dz.style.background='var(--accent-light)'; });
+  dz.addEventListener('dragleave', () => { dz.style.borderColor='var(--border)'; dz.style.background=''; });
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor='var(--border)'; dz.style.background=''; handleRoomFile(e.dataTransfer.files[0]); });
 }
 
 async function saveRoomPhoto(roomId) {
@@ -1232,9 +1245,14 @@ function uploadPhoto(supplyId, supplyName) {
   openModal(`
     <div style="font-weight:600;font-size:16px;margin-bottom:8px;">Upload photo</div>
     <div style="font-size:14px;color:var(--text2);margin-bottom:20px;">${supplyName}</div>
-    <div class="field">
-      <label>Choose image (jpg, png)</label>
-      <input type="file" id="photo-input" accept="image/*" style="padding:8px;" />
+    <div id="supply-drop-zone" style="border:2px dashed var(--border);border-radius:var(--radius);padding:28px;text-align:center;cursor:pointer;margin-bottom:12px;transition:all 0.15s;">
+      <div style="font-size:28px;margin-bottom:8px;">🖼️</div>
+      <div style="font-size:14px;font-weight:500;color:var(--text2);margin-bottom:4px;">Drag & drop image here</div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">or</div>
+      <label style="display:inline-block;padding:7px 16px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;background:var(--surface);">
+        Browse file
+        <input type="file" id="photo-input" accept="image/*" style="display:none;" />
+      </label>
     </div>
     <div id="photo-preview-wrap" style="display:none;margin-bottom:16px;text-align:center;">
       <img id="photo-preview" style="max-width:100%;max-height:200px;border-radius:var(--radius);border:1px solid var(--border);" />
@@ -1245,15 +1263,23 @@ function uploadPhoto(supplyId, supplyName) {
       <button class="btn" onclick="closeModal()">Cancel</button>
     </div>`);
 
-  document.getElementById('photo-input').addEventListener('change', async function() {
-    const file = this.files[0]; if (!file) return;
+  async function handleSupplyFile(file) {
+    if (!file || !file.type.startsWith('image/')) { toast('Please use an image file.'); return; }
     const compressed = await compressImage(file);
     window._photoBlob = compressed;
-    const url = URL.createObjectURL(compressed);
-    document.getElementById('photo-preview').src = url;
+    document.getElementById('photo-preview').src = URL.createObjectURL(compressed);
     document.getElementById('photo-size-label').textContent = 'Size: ' + Math.round(compressed.size/1024) + ' KB';
     document.getElementById('photo-preview-wrap').style.display = 'block';
-  });
+    document.getElementById('supply-drop-zone').style.borderColor = 'var(--accent)';
+    document.getElementById('supply-drop-zone').style.background = 'var(--accent-light)';
+  }
+
+  document.getElementById('photo-input').addEventListener('change', function() { handleSupplyFile(this.files[0]); });
+
+  const dz = document.getElementById('supply-drop-zone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor='var(--accent)'; dz.style.background='var(--accent-light)'; });
+  dz.addEventListener('dragleave', () => { dz.style.borderColor='var(--border)'; dz.style.background=''; });
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.style.borderColor='var(--border)'; dz.style.background=''; handleSupplyFile(e.dataTransfer.files[0]); });
 }
 
 async function savePhoto(supplyId) {
