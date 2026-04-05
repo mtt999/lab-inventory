@@ -414,8 +414,11 @@ function renderRooms() {
   empty.style.display = 'none';
   grid.innerHTML = cache.rooms.map(r => {
     const cnt = cache.supplies.filter(s=>s.room_id===r.id).length;
-    return `<div class="room-card" onclick="startInspection('${r.id}')">
-      <div class="room-icon">${r.icon||'🧪'}</div>
+    const imgHtml = r.photo_url
+      ? `<img src="${r.photo_url}" style="width:100%;height:90px;object-fit:cover;border-radius:10px 10px 0 0;margin:-20px -16px 12px;width:calc(100% + 32px);" />`
+      : `<div class="room-icon">${r.icon||'🧪'}</div>`;
+    return `<div class="room-card" onclick="startInspection('${r.id}')" style="${r.photo_url?'padding-top:0;overflow:hidden;':''}">
+      ${imgHtml}
       <div class="room-name">${r.name}</div>
       <div class="room-count">${cnt} item${cnt!==1?'s':''}</div>
     </div>`;
@@ -439,22 +442,54 @@ function renderInspectionStep() {
   const photoHtml = item.photo_url
     ? `<img src="${item.photo_url}" alt="${item.name}" style="width:120px;height:120px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:16px;" />`
     : `<div style="width:120px;height:120px;border-radius:var(--radius);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:var(--text3);font-size:12px;">No photo</div>`;
+
+  // Build links html
+  const links = item.links || [];
+  const linksHtml = links.length
+    ? links.map(l=>`<a href="${l.url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--accent);border-radius:var(--radius);color:var(--accent);font-size:13px;font-weight:500;text-decoration:none;background:var(--accent-light);">🛒 ${l.label||'Buy now'}</a>`).join('')
+    : '<div style="font-size:13px;color:var(--text3);">No purchase links added.</div>';
+
+  const notes = item.notes || '';
+
   document.getElementById('item-card-wrap').innerHTML = `
     <div class="item-card">
       ${photoHtml}
       <div class="item-name-big">${item.name}</div>
       <div class="item-meta">Minimum required: ${item.min_qty} ${item.unit}</div>
-      <div class="qty-input-wrap">
-        <button class="qty-btn" onclick="adjustQty(-1)">−</button>
-        <input class="qty-input-big" type="number" id="qty-input" value="0" min="0"/>
-        <button class="qty-btn" onclick="adjustQty(1)">+</button>
+
+      <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:16px;gap:0;">
+        <button onclick="inspTab('count')" id="itab-count" style="flex:1;padding:8px;border:none;background:transparent;font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid var(--accent);color:var(--accent);">Count</button>
+        <button onclick="inspTab('info')" id="itab-info" style="flex:1;padding:8px;border:none;background:transparent;font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;color:var(--text2);">Info & Links</button>
       </div>
-      <div style="display:flex;gap:10px;justify-content:center;">
+
+      <div id="itab-count-panel">
+        <div class="qty-input-wrap">
+          <button class="qty-btn" onclick="adjustQty(-1)">−</button>
+          <input class="qty-input-big" type="number" id="qty-input" value="${inspection.results[index]!==undefined ? inspection.results[index].qty : 0}" min="0"/>
+          <button class="qty-btn" onclick="adjustQty(1)">+</button>
+        </div>
+      </div>
+
+      <div id="itab-info-panel" style="display:none;text-align:left;">
+        ${notes ? `<div style="font-size:13px;color:var(--text2);background:var(--surface2);border-radius:var(--radius);padding:12px;margin-bottom:12px;line-height:1.6;">${notes.replace(/\n/g,'<br>')}</div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">${linksHtml}</div>
+      </div>
+
+      <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
         ${index>0?`<button class="btn" onclick="prevItem()">← Back</button>`:''}
         <button class="btn btn-primary" onclick="nextItem()">${index===items.length-1?'Finish →':'Next →'}</button>
       </div>
     </div>`;
-  document.getElementById('qty-input').focus();
+  document.getElementById('qty-input') && document.getElementById('qty-input').focus();
+}
+
+function inspTab(tab) {
+  document.getElementById('itab-count-panel').style.display = tab==='count' ? 'block' : 'none';
+  document.getElementById('itab-info-panel').style.display = tab==='info' ? 'block' : 'none';
+  document.getElementById('itab-count').style.borderBottomColor = tab==='count' ? 'var(--accent)' : 'transparent';
+  document.getElementById('itab-count').style.color = tab==='count' ? 'var(--accent)' : 'var(--text2)';
+  document.getElementById('itab-info').style.borderBottomColor = tab==='info' ? 'var(--accent)' : 'transparent';
+  document.getElementById('itab-info').style.color = tab==='info' ? 'var(--accent)' : 'var(--text2)';
 }
 
 function adjustQty(d) {
@@ -521,42 +556,127 @@ function showResults(record) {
 
 function exportExcel() {
   const rec = window._rec; if (!rec) return;
-  const results = rec.results||[];
+  const inspectedResults = rec.results || [];
+  const dateStr = new Date(rec.inspected_at).toLocaleString();
+  const dateFile = new Date(rec.inspected_at).toLocaleDateString('en-CA');
+
+  // Build a map of inspected items by supply id for quick lookup
+  const inspectedMap = {};
+  inspectedResults.forEach(r => { if (r.id) inspectedMap[r.id] = r; });
+
+  // Header
   const data = [
-    ['LabStock — Supply Inspection Report'],
-    ['Room:', rec.room_name],['Date:', new Date(rec.inspected_at).toLocaleString()],['Inspector:', rec.inspector],[],
-    ['Item','Unit','Count','Minimum','Status'],
-    ...results.map(r=>[r.name, r.unit, r.qty, r.min_qty, r.low?'NEEDS RESTOCK':'OK'])
+    ['LabStock — Full Inspection Report'],
+    ['Date:', dateStr],
+    ['Inspector:', rec.inspector],
+    ['Inspected Room:', rec.room_name],
+    []
   ];
-  if (results.some(r=>r.low)) {
-    data.push([],['ITEMS NEEDING RESTOCK']);
-    results.filter(r=>r.low).forEach(r=>data.push([r.name, r.unit, 'Current: '+r.qty, 'Min: '+r.min_qty, 'Shortage: '+(r.min_qty-r.qty)]));
+
+  // All low items summary at top
+  const allLow = inspectedResults.filter(r => r.low);
+  if (allLow.length) {
+    data.push(['⚠ ITEMS NEEDING RESTOCK']);
+    data.push(['Room', 'Item', 'Unit', 'Current Count', 'Minimum', 'Shortage', 'Purchase Links']);
+    allLow.forEach(r => {
+      const linkText = (r.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
+      data.push([rec.room_name, r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty, linkText]);
+    });
+    data.push([]);
   }
+
+  // Full room-by-room breakdown
+  data.push(['FULL INVENTORY']);
+  cache.rooms.forEach(room => {
+    data.push([]);
+    data.push([room.name.toUpperCase()]);
+    data.push(['Item', 'Unit', 'Count', 'Minimum', 'Status', 'Purchase Links']);
+    const supplies = cache.supplies.filter(s => s.room_id === room.id);
+    if (!supplies.length) {
+      data.push(['(no items configured)', '', '', '', '']);
+    } else if (room.id === rec.room_id) {
+      // This is the inspected room — show actual counts
+      supplies.forEach(s => {
+        const r = inspectedMap[s.id];
+        if (r) {
+          const lnk1 = (s.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
+          data.push([s.name, s.unit, r.qty, s.min_qty, r.low ? 'NEEDS RESTOCK' : 'OK', lnk1]);
+        } else {
+          const lnk2 = (s.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
+          data.push([s.name, s.unit, 'Not counted', s.min_qty, '—', lnk2]);
+        }
+      });
+    } else {
+      // Not inspected this run — show items with blank counts
+      supplies.forEach(s => {
+        const lnk3 = (s.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
+        data.push([s.name, s.unit, '—', s.min_qty, 'Not inspected', lnk3]);
+      });
+    }
+  });
+
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols']=[{wch:30},{wch:12},{wch:10},{wch:12},{wch:16}];
+  ws['!cols'] = [{wch:28},{wch:14},{wch:12},{wch:12},{wch:16},{wch:40}];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Inspection');
-  XLSX.writeFile(wb, `LabStock_${rec.room_name.replace(/\s+/g,'_')}_${new Date(rec.inspected_at).toLocaleDateString('en-CA')}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, 'Full Report');
+  XLSX.writeFile(wb, `LabStock_Report_${dateFile}.xlsx`);
 }
 
 async function renderHistory() {
   const el = document.getElementById('history-list');
   el.innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>';
-  const { data } = await sb.from('inspections').select('*').order('inspected_at',{ascending:false}).limit(50);
+  const { data } = await sb.from('inspections').select('*').order('inspected_at',{ascending:false}).limit(200);
   if (!data||!data.length) { el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div>No inspections yet.</div>'; return; }
-  el.innerHTML = data.map(rec=>`
-    <div class="history-item" onclick="viewHistoryRecord('${rec.id}')">
-      <div>
-        <div class="history-title">${rec.room_name}</div>
-        <div class="history-meta">${new Date(rec.inspected_at).toLocaleString()} · ${rec.inspector}</div>
-      </div>
-      <div style="text-align:right;">
-        ${rec.flag_count>0
-          ?`<div style="font-size:12px;color:var(--accent2);font-weight:500;">${rec.flag_count} low item${rec.flag_count>1?'s':''}</div>`
-          :'<div style="font-size:12px;color:var(--accent);font-weight:500;">All OK</div>'}
-        <div style="font-size:11px;color:var(--text3);margin-top:2px;">tap to view →</div>
-      </div>
-    </div>`).join('');
+
+  // Group by month
+  const months = {};
+  data.forEach(rec => {
+    const d = new Date(rec.inspected_at);
+    const key = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const label = d.toLocaleString('default',{month:'long',year:'numeric'});
+    if (!months[key]) months[key] = { label, records: [] };
+    months[key].records.push(rec);
+  });
+
+  el.innerHTML = Object.keys(months).sort((a,b)=>b.localeCompare(a)).map(key => {
+    const { label, records } = months[key];
+    const monthId = 'month-' + key;
+    const items = records.map(rec => `
+      <div class="history-item" onclick="viewHistoryRecord('${rec.id}')" style="margin-bottom:8px;">
+        <div>
+          <div class="history-title">${rec.room_name}</div>
+          <div class="history-meta">${new Date(rec.inspected_at).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${new Date(rec.inspected_at).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})} · ${rec.inspector}</div>
+        </div>
+        <div style="text-align:right;">
+          ${rec.flag_count>0
+            ?`<div style="font-size:12px;color:var(--accent2);font-weight:500;">${rec.flag_count} low item${rec.flag_count>1?'s':''}</div>`
+            :'<div style="font-size:12px;color:var(--accent);font-weight:500;">All OK</div>'}
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">tap to view →</div>
+        </div>
+      </div>`).join('');
+
+    return `
+      <div style="margin-bottom:24px;">
+        <div onclick="toggleMonth('${monthId}')" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:15px;font-weight:600;">${label}</span>
+            <span style="font-size:12px;font-family:var(--mono);color:var(--text3);">${records.length} inspection${records.length!==1?'s':''}</span>
+          </div>
+          <span id="${monthId}-arrow" style="font-size:13px;color:var(--text3);transition:transform 0.2s;">▼</span>
+        </div>
+        <div id="${monthId}" style="padding-left:4px;">
+          ${items}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleMonth(id) {
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(id+'-arrow');
+  const isOpen = el.style.display !== 'none';
+  el.style.display = isOpen ? 'none' : 'block';
+  arrow.style.transform = isOpen ? 'rotate(-90deg)' : 'rotate(0deg)';
 }
 
 async function viewHistoryRecord(id) {
@@ -597,10 +717,13 @@ function renderAdminRooms() {
     return `<div class="card" style="padding:14px 18px;margin-bottom:10px;">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-12">
-          <span style="font-size:22px;">${r.icon||'🧪'}</span>
+          ${r.photo_url
+            ? `<img src="${r.photo_url}" style="width:48px;height:48px;object-fit:cover;border-radius:8px;border:1px solid var(--border);flex-shrink:0;" />`
+            : `<span style="font-size:22px;">${r.icon||'🧪'}</span>`}
           <div><div style="font-weight:600;">${r.name}</div><div class="text-muted">${cnt} supplies</div></div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm" onclick="uploadRoomPhoto('${r.id}','${r.name.replace(/'/g,"\''")}')">Photo</button>
           <button class="btn btn-sm" onclick="editRoom('${r.id}')">Edit</button>
           <button class="btn btn-sm" style="color:var(--accent2);border-color:var(--accent2);" onclick="deleteRoom('${r.id}')">Delete</button>
         </div>
@@ -736,40 +859,83 @@ async function deleteRoom(id) {
   await renderAdminAll(); renderRooms(); toast('Room deleted.');
 }
 
-function openAddSupply() {
-  window._editSupplyId = null;
-  const fr = document.getElementById('supply-room-filter').value;
-  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add supply</div>
+function supplyModalBody(s) {
+  const links = s && s.links ? s.links : [];
+  return `
     <div class="field"><label>Room</label>
-      <select id="m-supply-room">${cache.rooms.map(r=>`<option value="${r.id}"${r.id===fr?' selected':''}>${r.name}</option>`).join('')}</select>
+      <select id="m-supply-room">${cache.rooms.map(r=>`<option value="${r.id}"${s&&r.id===s.room_id?' selected':''}>${r.name}</option>`).join('')}</select>
     </div>
-    <div class="field"><label>Supply name</label><input id="m-supply-name" placeholder="e.g. Nitrile Gloves (M)"/></div>
+    <div class="field"><label>Supply name</label><input id="m-supply-name" value="${s?s.name:''}" placeholder="e.g. Nitrile Gloves (M)"/></div>
     <div class="grid-2">
-      <div class="field"><label>Unit</label><input id="m-supply-unit" placeholder="boxes"/></div>
-      <div class="field"><label>Minimum qty</label><input id="m-supply-min" type="number" min="0" placeholder="3"/></div>
+      <div class="field"><label>Unit</label><input id="m-supply-unit" value="${s?s.unit:''}" placeholder="boxes"/></div>
+      <div class="field"><label>Minimum qty</label><input id="m-supply-min" type="number" value="${s?s.min_qty:''}" placeholder="3"/></div>
+    </div>
+    <div class="field"><label>Notes / details</label><textarea id="m-supply-notes" rows="3" placeholder="Storage location, handling instructions, specs…" style="resize:vertical;">${s&&s.notes?s.notes:''}</textarea></div>
+    <div class="field">
+      <label>Purchase links</label>
+      <div id="m-links-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px;">
+        ${links.map((l,i)=>`
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input placeholder="Label (e.g. Amazon)" value="${l.label||''}" id="m-link-label-${i}" style="flex:1;"/>
+            <input placeholder="https://..." value="${l.url||''}" id="m-link-url-${i}" style="flex:2;"/>
+            <button onclick="removeLink(${i})" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);cursor:pointer;color:var(--accent2);font-size:13px;">✕</button>
+          </div>`).join('')}
+      </div>
+      <button class="btn btn-sm" onclick="addLinkRow()" type="button">+ Add link</button>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px;">
       <button class="btn btn-primary" onclick="saveSupply()">Save</button>
       <button class="btn" onclick="closeModal()">Cancel</button>
-    </div>`);
+    </div>`;
+}
+
+function addLinkRow() {
+  const list = document.getElementById('m-links-list');
+  const i = list.children.length;
+  const div = document.createElement('div');
+  div.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  div.innerHTML = `
+    <input placeholder="Label (e.g. Amazon)" id="m-link-label-${i}" style="flex:1;"/>
+    <input placeholder="https://..." id="m-link-url-${i}" style="flex:2;"/>
+    <button onclick="removeLink(${i})" style="padding:6px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);cursor:pointer;color:var(--accent2);font-size:13px;">✕</button>`;
+  list.appendChild(div);
+}
+
+function removeLink(i) {
+  const list = document.getElementById('m-links-list');
+  if (list.children[i]) list.children[i].remove();
+  // Re-index remaining
+  Array.from(list.children).forEach((div, idx) => {
+    const inputs = div.querySelectorAll('input');
+    if (inputs[0]) inputs[0].id = `m-link-label-${idx}`;
+    if (inputs[1]) inputs[1].id = `m-link-url-${idx}`;
+    const btn = div.querySelector('button');
+    if (btn) btn.setAttribute('onclick', `removeLink(${idx})`);
+  });
+}
+
+function collectLinks() {
+  const list = document.getElementById('m-links-list');
+  const links = [];
+  Array.from(list.children).forEach((div, i) => {
+    const label = (document.getElementById(`m-link-label-${i}`)?.value||'').trim();
+    const url = (document.getElementById(`m-link-url-${i}`)?.value||'').trim();
+    if (url) links.push({ label: label||'Buy now', url });
+  });
+  return links;
+}
+
+function openAddSupply() {
+  window._editSupplyId = null;
+  const fr = document.getElementById('supply-room-filter').value;
+  const fakeS = fr ? {room_id: fr, name:'', unit:'', min_qty:'', notes:'', links:[]} : null;
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add supply</div>${supplyModalBody(fakeS)}`);
 }
 
 function editSupply(id) {
   const s = cache.supplies.find(s=>s.id===id);
   window._editSupplyId = id;
-  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Edit supply</div>
-    <div class="field"><label>Room</label>
-      <select id="m-supply-room">${cache.rooms.map(r=>`<option value="${r.id}"${r.id===s.room_id?' selected':''}>${r.name}</option>`).join('')}</select>
-    </div>
-    <div class="field"><label>Supply name</label><input id="m-supply-name" value="${s.name}"/></div>
-    <div class="grid-2">
-      <div class="field"><label>Unit</label><input id="m-supply-unit" value="${s.unit}"/></div>
-      <div class="field"><label>Minimum qty</label><input id="m-supply-min" type="number" value="${s.min_qty}"/></div>
-    </div>
-    <div style="display:flex;gap:10px;margin-top:20px;">
-      <button class="btn btn-primary" onclick="saveSupply()">Save</button>
-      <button class="btn" onclick="closeModal()">Cancel</button>
-    </div>`);
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Edit supply</div>${supplyModalBody(s)}`);
 }
 
 async function saveSupply() {
@@ -777,9 +943,12 @@ async function saveSupply() {
   const name = document.getElementById('m-supply-name').value.trim();
   const unit = document.getElementById('m-supply-unit').value.trim();
   const min_qty = parseInt(document.getElementById('m-supply-min').value)||0;
+  const notes = document.getElementById('m-supply-notes').value.trim();
+  const links = collectLinks();
   if (!name||!unit) { toast('Please fill all fields.'); return; }
-  if (window._editSupplyId) await sb.from('supplies').update({room_id,name,unit,min_qty}).eq('id',window._editSupplyId);
-  else await sb.from('supplies').insert({room_id,name,unit,min_qty});
+  const payload = {room_id, name, unit, min_qty, notes, links};
+  if (window._editSupplyId) await sb.from('supplies').update(payload).eq('id',window._editSupplyId);
+  else await sb.from('supplies').insert(payload);
   closeModal(); await renderAdminAll(); toast('Supply saved.');
 }
 
@@ -978,6 +1147,61 @@ function downloadTemplate() {
   XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
   XLSX.writeFile(wb, 'LabStock_template.xlsx');
 }
+
+// ── ROOM PHOTO UPLOAD ──
+function uploadRoomPhoto(roomId, roomName) {
+  openModal(`
+    <div style="font-weight:600;font-size:16px;margin-bottom:8px;">Upload room photo</div>
+    <div style="font-size:14px;color:var(--text2);margin-bottom:20px;">${roomName}</div>
+    <div class="field">
+      <label>Choose image (jpg, png)</label>
+      <input type="file" id="room-photo-input" accept="image/*" style="padding:8px;" />
+    </div>
+    <div id="room-photo-preview-wrap" style="display:none;margin-bottom:16px;text-align:center;">
+      <img id="room-photo-preview" style="max-width:100%;max-height:180px;border-radius:var(--radius);border:1px solid var(--border);" />
+      <div style="font-size:12px;color:var(--text3);margin-top:6px;" id="room-photo-size-label"></div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" id="room-photo-save-btn" onclick="saveRoomPhoto('${roomId}')">Save photo</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
+
+  document.getElementById('room-photo-input').addEventListener('change', async function() {
+    const file = this.files[0]; if (!file) return;
+    const compressed = await compressImage(file, 800, 0.8);
+    window._roomPhotoBlob = compressed;
+    const url = URL.createObjectURL(compressed);
+    document.getElementById('room-photo-preview').src = url;
+    document.getElementById('room-photo-size-label').textContent = 'Size: ' + Math.round(compressed.size/1024) + ' KB';
+    document.getElementById('room-photo-preview-wrap').style.display = 'block';
+  });
+}
+
+async function saveRoomPhoto(roomId) {
+  const blob = window._roomPhotoBlob;
+  if (!blob) { toast('Please select an image first.'); return; }
+  const btn = document.getElementById('room-photo-save-btn');
+  btn.textContent = 'Uploading…'; btn.disabled = true;
+  try {
+    const filename = 'room_' + roomId + '_' + Date.now() + '.jpg';
+    const { error: upErr } = await sb.storage.from('item-photos').upload(filename, blob, { contentType: 'image/jpeg', upsert: true });
+    if (upErr) throw upErr;
+    const { data: urlData } = sb.storage.from('item-photos').getPublicUrl(filename);
+    const photo_url = urlData.publicUrl;
+    await sb.from('rooms').update({ photo_url }).eq('id', roomId);
+    const r = cache.rooms.find(r => r.id === roomId);
+    if (r) r.photo_url = photo_url;
+    closeModal();
+    renderAdminRooms();
+    renderRooms();
+    toast('Room photo saved!');
+  } catch(e) {
+    toast('Upload failed. Check your Supabase storage bucket.');
+    console.error(e);
+    btn.textContent = 'Save photo'; btn.disabled = false;
+  }
+}
+
 
 // ── PHOTO UPLOAD ──
 async function compressImage(file, maxPx=400, quality=0.75) {
