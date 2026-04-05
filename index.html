@@ -4,612 +4,127 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>LabStock — Supply Inventory</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap');
-
   :root {
-    --bg: #f4f3ef;
-    --surface: #ffffff;
-    --surface2: #f0efe9;
-    --border: #e0ddd4;
-    --text: #1a1916;
-    --text2: #6b6860;
-    --text3: #a09d96;
-    --accent: #2a6049;
-    --accent-light: #e8f2ee;
-    --accent2: #c84b2f;
-    --accent2-light: #fdf0ed;
-    --warn: #d97706;
-    --warn-light: #fef3c7;
-    --mono: 'DM Mono', monospace;
-    --sans: 'DM Sans', sans-serif;
-    --radius: 10px;
-    --radius-lg: 16px;
+    --bg:#f4f3ef;--surface:#fff;--surface2:#f0efe9;--border:#e0ddd4;
+    --text:#1a1916;--text2:#6b6860;--text3:#a09d96;
+    --accent:#2a6049;--accent-light:#e8f2ee;
+    --accent2:#c84b2f;--accent2-light:#fdf0ed;
+    --warn-light:#fef3c7;
+    --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;
+    --radius:10px;--radius-lg:16px;
   }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    font-family: var(--sans);
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    font-size: 15px;
-    line-height: 1.6;
-  }
-
-  /* ── LAYOUT ── */
-  #app { display: flex; flex-direction: column; min-height: 100vh; }
-
-  header {
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    height: 56px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    position: sticky;
-    top: 0;
-    z-index: 100;
-  }
-
-  .logo {
-    font-family: var(--mono);
-    font-weight: 500;
-    font-size: 16px;
-    letter-spacing: -0.5px;
-    color: var(--accent);
-  }
-
-  .logo span { color: var(--text3); }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  #user-badge {
-    font-size: 13px;
-    color: var(--text2);
-    font-family: var(--mono);
-  }
-
-  .main-content {
-    flex: 1;
-    max-width: 720px;
-    margin: 0 auto;
-    width: 100%;
-    padding: 32px 20px;
-  }
-
-  /* ── SCREENS ── */
-  .screen { display: none; }
-  .screen.active { display: block; }
-
-  /* ── REMINDER BANNER ── */
-  #reminder-banner {
-    background: var(--warn-light);
-    border: 1px solid #fcd34d;
-    border-radius: var(--radius);
-    padding: 12px 16px;
-    margin-bottom: 20px;
-    display: none;
-    align-items: center;
-    gap: 10px;
-    font-size: 14px;
-    color: #92400e;
-  }
-
-  #reminder-banner .bell { font-size: 16px; }
-
-  /* ── CARDS ── */
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    margin-bottom: 16px;
-  }
-
-  .card-title {
-    font-size: 13px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text3);
-    margin-bottom: 16px;
-    font-family: var(--mono);
-  }
-
-  /* ── BUTTONS ── */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 10px 18px;
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    background: var(--surface);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  .btn:hover { background: var(--surface2); border-color: #c8c5bc; }
-  .btn:active { transform: scale(0.98); }
-
-  .btn-primary {
-    background: var(--accent);
-    color: #fff;
-    border-color: var(--accent);
-  }
-  .btn-primary:hover { background: #1e4d39; border-color: #1e4d39; }
-
-  .btn-danger {
-    background: var(--accent2);
-    color: #fff;
-    border-color: var(--accent2);
-  }
-  .btn-danger:hover { background: #a83a22; }
-
-  .btn-sm {
-    padding: 6px 12px;
-    font-size: 13px;
-    border-radius: 7px;
-  }
-
-  .btn-icon {
-    padding: 8px;
-    border-radius: 8px;
-    font-size: 16px;
-    line-height: 1;
-  }
-
-  /* ── INPUTS ── */
-  input, select, textarea {
-    font-family: var(--sans);
-    font-size: 15px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px 12px;
-    background: var(--surface);
-    color: var(--text);
-    width: 100%;
-    transition: border-color 0.15s;
-    outline: none;
-  }
-
-  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(42,96,73,0.1); }
-
-  label {
-    display: block;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text2);
-    margin-bottom: 6px;
-  }
-
-  .field { margin-bottom: 16px; }
-
-  /* ── LOGIN ── */
-  #login-screen {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    padding: 20px;
-    background: var(--bg);
-  }
-
-  .login-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 40px 32px;
-    width: 100%;
-    max-width: 360px;
-    text-align: center;
-  }
-
-  .login-logo {
-    font-family: var(--mono);
-    font-size: 22px;
-    font-weight: 500;
-    color: var(--accent);
-    margin-bottom: 4px;
-  }
-
-  .login-sub {
-    font-size: 13px;
-    color: var(--text3);
-    margin-bottom: 32px;
-  }
-
-  .pin-display {
-    font-family: var(--mono);
-    font-size: 32px;
-    letter-spacing: 12px;
-    color: var(--text);
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 24px;
-  }
-
-  .pin-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    border: 2px solid var(--border);
-    margin: 0 4px;
-    transition: all 0.15s;
-  }
-
-  .pin-dot.filled {
-    background: var(--accent);
-    border-color: var(--accent);
-  }
-
-  .pin-pad {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-bottom: 12px;
-  }
-
-  .pin-key {
-    aspect-ratio: 1;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    font-family: var(--mono);
-    font-size: 18px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.12s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text);
-  }
-
-  .pin-key:hover { background: var(--surface2); }
-  .pin-key:active { transform: scale(0.93); background: var(--accent-light); }
-
-  .login-error {
-    font-size: 13px;
-    color: var(--accent2);
-    margin-top: 12px;
-    min-height: 20px;
-  }
-
-  .role-tabs {
-    display: flex;
-    background: var(--surface2);
-    border-radius: var(--radius);
-    padding: 3px;
-    margin-bottom: 24px;
-  }
-
-  .role-tab {
-    flex: 1;
-    padding: 8px;
-    border: none;
-    border-radius: 8px;
-    background: transparent;
-    font-family: var(--sans);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    color: var(--text2);
-    transition: all 0.15s;
-  }
-
-  .role-tab.active {
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  }
-
-  /* ── SECTION HEADER ── */
-  .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-  }
-
-  .section-title {
-    font-size: 20px;
-    font-weight: 600;
-    letter-spacing: -0.4px;
-  }
-
-  /* ── ROOM GRID ── */
-  .room-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  .room-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 20px 16px;
-    cursor: pointer;
-    transition: all 0.15s;
-    text-align: center;
-  }
-
-  .room-card:hover { border-color: var(--accent); background: var(--accent-light); transform: translateY(-1px); }
-
-  .room-icon { font-size: 28px; margin-bottom: 8px; }
-  .room-name { font-weight: 600; font-size: 14px; }
-  .room-count { font-size: 12px; color: var(--text3); margin-top: 2px; }
-
-  /* ── INSPECTION ── */
-  .progress-bar-wrap {
-    background: var(--surface2);
-    border-radius: 99px;
-    height: 6px;
-    margin-bottom: 24px;
-    overflow: hidden;
-  }
-
-  .progress-bar-fill {
-    height: 100%;
-    background: var(--accent);
-    border-radius: 99px;
-    transition: width 0.3s ease;
-  }
-
-  .item-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 24px;
-    text-align: center;
-    animation: slideIn 0.25s ease;
-  }
-
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .item-name-big {
-    font-size: 22px;
-    font-weight: 600;
-    margin-bottom: 6px;
-    letter-spacing: -0.4px;
-  }
-
-  .item-meta {
-    font-size: 13px;
-    color: var(--text3);
-    font-family: var(--mono);
-    margin-bottom: 24px;
-  }
-
-  .qty-input-wrap {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-
-  .qty-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: 1px solid var(--border);
-    background: var(--surface2);
-    font-size: 20px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.12s;
-    color: var(--text);
-    line-height: 1;
-  }
-
-  .qty-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-  .qty-input-big {
-    width: 100px !important;
-    text-align: center;
-    font-family: var(--mono);
-    font-size: 32px;
-    font-weight: 500;
-    border-radius: var(--radius);
-    padding: 8px;
-  }
-
-  /* ── RESULTS TABLE ── */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 14px;
-  }
-
-  th {
-    font-size: 12px;
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--text3);
-    font-family: var(--mono);
-    padding: 8px 10px;
-    text-align: left;
-    border-bottom: 1px solid var(--border);
-  }
-
-  td {
-    padding: 10px 10px;
-    border-bottom: 1px solid var(--surface2);
-    vertical-align: middle;
-  }
-
-  tr:last-child td { border-bottom: none; }
-
-  .flag-red { background: var(--accent2-light); }
-  .flag-red td:first-child { border-left: 3px solid var(--accent2); }
-
-  .badge {
-    display: inline-block;
-    font-size: 11px;
-    font-weight: 500;
-    font-family: var(--mono);
-    padding: 2px 8px;
-    border-radius: 99px;
-  }
-
-  .badge-low { background: var(--accent2-light); color: var(--accent2); }
-  .badge-ok { background: var(--accent-light); color: var(--accent); }
-
-  /* ── ADMIN TABS ── */
-  .admin-tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--border);
-    margin-bottom: 24px;
-  }
-
-  .admin-tab {
-    padding: 10px 16px;
-    border: none;
-    background: transparent;
-    font-family: var(--sans);
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    color: var(--text2);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -1px;
-    transition: all 0.15s;
-  }
-
-  .admin-tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-  }
-
-  .admin-section { display: none; }
-  .admin-section.active { display: block; }
-
-  /* ── NAV ── */
-  .nav-menu {
-    display: flex;
-    gap: 4px;
-  }
-
-  .nav-btn {
-    padding: 6px 14px;
-    border: none;
-    background: transparent;
-    font-family: var(--sans);
-    font-size: 14px;
-    cursor: pointer;
-    color: var(--text2);
-    border-radius: 8px;
-    transition: all 0.15s;
-    font-weight: 500;
-  }
-
-  .nav-btn:hover { background: var(--surface2); color: var(--text); }
-  .nav-btn.active { background: var(--accent-light); color: var(--accent); }
-
-  /* ── HISTORY ── */
-  .history-item {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    padding: 16px 20px;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    transition: all 0.15s;
-  }
-
-  .history-item:hover { border-color: var(--accent); }
-
-  .history-title { font-weight: 600; font-size: 15px; }
-  .history-meta { font-size: 12px; color: var(--text3); font-family: var(--mono); margin-top: 2px; }
-  .history-flags { font-size: 12px; color: var(--accent2); font-weight: 500; }
-
-  /* ── MISC ── */
-  .empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    color: var(--text3);
-    font-size: 14px;
-  }
-
-  .empty-icon { font-size: 32px; margin-bottom: 8px; }
-
-  .divider {
-    height: 1px;
-    background: var(--border);
-    margin: 16px 0;
-  }
-
-  .grid-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-
-  .text-danger { color: var(--accent2); }
-  .text-success { color: var(--accent); }
-  .text-muted { color: var(--text3); font-size: 13px; }
-
-  .flex { display: flex; }
-  .items-center { align-items: center; }
-  .justify-between { justify-content: space-between; }
-  .gap-8 { gap: 8px; }
-  .gap-12 { gap: 12px; }
-  .mb-8 { margin-bottom: 8px; }
-  .mb-16 { margin-bottom: 16px; }
-  .mt-16 { margin-top: 16px; }
-
-  .tag {
-    display: inline-block;
-    background: var(--surface2);
-    color: var(--text2);
-    font-size: 12px;
-    padding: 3px 10px;
-    border-radius: 99px;
-    font-family: var(--mono);
-  }
-
-  @media (max-width: 500px) {
-    .grid-2 { grid-template-columns: 1fr; }
-    .room-grid { grid-template-columns: repeat(2, 1fr); }
-    header { padding: 0 16px; }
-    .main-content { padding: 20px 14px; }
-  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh;font-size:15px;line-height:1.6;}
+  #app{display:flex;flex-direction:column;min-height:100vh;}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+  .logo{font-family:var(--mono);font-weight:500;font-size:16px;letter-spacing:-0.5px;color:var(--accent);}
+  .logo span{color:var(--text3);}
+  .header-right{display:flex;align-items:center;gap:12px;}
+  #user-badge{font-size:13px;color:var(--text2);font-family:var(--mono);}
+  .main-content{flex:1;max-width:720px;margin:0 auto;width:100%;padding:32px 20px;}
+  .screen{display:none;}.screen.active{display:block;}
+
+  #global-loader{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px;}
+  .spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .loader-text{font-family:var(--mono);font-size:13px;color:var(--text3);}
+
+  #reminder-banner{background:var(--warn-light);border:1px solid #fcd34d;border-radius:var(--radius);padding:12px 16px;margin-bottom:20px;display:none;align-items:center;gap:10px;font-size:14px;color:#92400e;}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;margin-bottom:16px;}
+  .card-title{font-size:13px;font-weight:500;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);margin-bottom:16px;font-family:var(--mono);}
+
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 18px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;transition:all 0.15s;white-space:nowrap;}
+  .btn:hover{background:var(--surface2);border-color:#c8c5bc;}.btn:active{transform:scale(0.98);}
+  .btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}.btn-primary:hover{background:#1e4d39;}
+  .btn-sm{padding:6px 12px;font-size:13px;border-radius:7px;}
+
+  input,select,textarea{font-family:var(--sans);font-size:15px;border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;background:var(--surface);color:var(--text);width:100%;transition:border-color 0.15s;outline:none;}
+  input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(42,96,73,0.1);}
+  label{display:block;font-size:13px;font-weight:500;color:var(--text2);margin-bottom:6px;}
+  .field{margin-bottom:16px;}
+
+  #login-screen{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px;background:var(--bg);}
+  .login-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:40px 32px;width:100%;max-width:360px;text-align:center;}
+  .login-logo{font-family:var(--mono);font-size:22px;font-weight:500;color:var(--accent);margin-bottom:4px;}
+  .login-sub{font-size:13px;color:var(--text3);margin-bottom:32px;}
+  .pin-display{height:48px;display:flex;align-items:center;justify-content:center;margin-bottom:24px;}
+  .pin-dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--border);margin:0 4px;transition:all 0.15s;}
+  .pin-dot.filled{background:var(--accent);border-color:var(--accent);}
+  .pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+  .pin-key{aspect-ratio:1;border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);font-family:var(--mono);font-size:18px;font-weight:500;cursor:pointer;transition:all 0.12s;display:flex;align-items:center;justify-content:center;color:var(--text);}
+  .pin-key:hover{background:var(--surface2);}.pin-key:active{transform:scale(0.93);background:var(--accent-light);}
+  .login-error{font-size:13px;color:var(--accent2);margin-top:12px;min-height:20px;}
+  .role-tabs{display:flex;background:var(--surface2);border-radius:var(--radius);padding:3px;margin-bottom:24px;}
+  .role-tab{flex:1;padding:8px;border:none;border-radius:8px;background:transparent;font-family:var(--sans);font-size:13px;font-weight:500;cursor:pointer;color:var(--text2);transition:all 0.15s;}
+  .role-tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+
+  .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+  .section-title{font-size:20px;font-weight:600;letter-spacing:-0.4px;}
+  .nav-menu{display:flex;gap:4px;}
+  .nav-btn{padding:6px 14px;border:none;background:transparent;font-family:var(--sans);font-size:14px;cursor:pointer;color:var(--text2);border-radius:8px;transition:all 0.15s;font-weight:500;}
+  .nav-btn:hover{background:var(--surface2);color:var(--text);}.nav-btn.active{background:var(--accent-light);color:var(--accent);}
+
+  .room-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:16px;}
+  .room-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px 16px;cursor:pointer;transition:all 0.15s;text-align:center;}
+  .room-card:hover{border-color:var(--accent);background:var(--accent-light);transform:translateY(-1px);}
+  .room-icon{font-size:28px;margin-bottom:8px;}.room-name{font-weight:600;font-size:14px;}.room-count{font-size:12px;color:var(--text3);margin-top:2px;}
+
+  .progress-bar-wrap{background:var(--surface2);border-radius:99px;height:6px;margin-bottom:24px;overflow:hidden;}
+  .progress-bar-fill{height:100%;background:var(--accent);border-radius:99px;transition:width 0.3s ease;}
+  .item-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;text-align:center;animation:slideIn 0.25s ease;}
+  @keyframes slideIn{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+  .item-name-big{font-size:22px;font-weight:600;margin-bottom:6px;letter-spacing:-0.4px;}
+  .item-meta{font-size:13px;color:var(--text3);font-family:var(--mono);margin-bottom:24px;}
+  .qty-input-wrap{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:20px;}
+  .qty-btn{width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;color:var(--text);line-height:1;}
+  .qty-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .qty-input-big{width:100px!important;text-align:center;font-family:var(--mono);font-size:32px;font-weight:500;border-radius:var(--radius);padding:8px;}
+
+  table{width:100%;border-collapse:collapse;font-size:14px;}
+  th{font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:0.06em;color:var(--text3);font-family:var(--mono);padding:8px 10px;text-align:left;border-bottom:1px solid var(--border);}
+  td{padding:10px;border-bottom:1px solid var(--surface2);vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  .flag-red{background:var(--accent2-light);}.flag-red td:first-child{border-left:3px solid var(--accent2);}
+  .badge{display:inline-block;font-size:11px;font-weight:500;font-family:var(--mono);padding:2px 8px;border-radius:99px;}
+  .badge-low{background:var(--accent2-light);color:var(--accent2);}.badge-ok{background:var(--accent-light);color:var(--accent);}
+
+  .admin-tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:24px;}
+  .admin-tab{padding:10px 16px;border:none;background:transparent;font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all 0.15s;}
+  .admin-tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .admin-section{display:none;}.admin-section.active{display:block;}
+
+  .history-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 20px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:all 0.15s;}
+  .history-item:hover{border-color:var(--accent);}
+  .history-title{font-weight:600;font-size:15px;}.history-meta{font-size:12px;color:var(--text3);font-family:var(--mono);margin-top:2px;}
+
+  .empty-state{text-align:center;padding:48px 24px;color:var(--text3);font-size:14px;}
+  .empty-icon{font-size:32px;margin-bottom:8px;}
+  .divider{height:1px;background:var(--border);margin:16px 0;}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .text-muted{color:var(--text3);font-size:13px;}
+  .flex{display:flex;}.items-center{align-items:center;}.justify-between{justify-content:space-between;}.gap-12{gap:12px;}.mb-16{margin-bottom:16px;}
+
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 20px;border-radius:99px;font-size:14px;z-index:500;opacity:0;transition:opacity 0.2s;pointer-events:none;white-space:nowrap;}
+  .toast.show{opacity:1;}
+
+  @media(max-width:500px){.grid-2{grid-template-columns:1fr;}.room-grid{grid-template-columns:repeat(2,1fr);}header{padding:0 16px;}.main-content{padding:20px 14px;}.admin-tab{padding:8px 10px;font-size:12px;}}
 </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="login-screen" class="screen active">
+<div id="global-loader">
+  <div class="spinner"></div>
+  <div class="loader-text">Connecting to database…</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div id="login-screen" style="display:none;">
   <div class="login-box">
     <div class="login-logo">LabStock</div>
     <div class="login-sub">Weekly Supply Inventory System</div>
@@ -617,11 +132,9 @@
       <button class="role-tab active" onclick="setLoginRole('user')">Staff</button>
       <button class="role-tab" onclick="setLoginRole('admin')">Admin</button>
     </div>
-    <div class="pin-display" id="pin-display">
-      <div class="pin-dot" id="dot-0"></div>
-      <div class="pin-dot" id="dot-1"></div>
-      <div class="pin-dot" id="dot-2"></div>
-      <div class="pin-dot" id="dot-3"></div>
+    <div class="pin-display">
+      <div class="pin-dot" id="dot-0"></div><div class="pin-dot" id="dot-1"></div>
+      <div class="pin-dot" id="dot-2"></div><div class="pin-dot" id="dot-3"></div>
     </div>
     <div class="pin-pad">
       <button class="pin-key" onclick="pinPress('1')">1</button>
@@ -638,16 +151,15 @@
       <button class="pin-key" onclick="pinBackspace()">⌫</button>
     </div>
     <div class="login-error" id="login-error"></div>
-    <div style="margin-top:16px; font-size:12px; color:var(--text3);">Default admin PIN: 1234 · Staff PIN: 0000</div>
+    <div style="margin-top:16px;font-size:12px;color:var(--text3);">Admin PIN: 1234 · Staff PIN: 0000</div>
   </div>
 </div>
 
-<!-- MAIN APP -->
-<div id="app" style="display:none;">
+<div id="app" style="display:none;flex-direction:column;min-height:100vh;">
   <header>
     <div class="logo">Lab<span>Stock</span></div>
     <div class="header-right">
-      <div class="nav-menu" id="nav-menu">
+      <div class="nav-menu">
         <button class="nav-btn active" onclick="showScreen('home')">Inventory</button>
         <button class="nav-btn" onclick="showScreen('history')">History</button>
         <button class="nav-btn" id="admin-nav-btn" style="display:none;" onclick="showScreen('admin')">Admin</button>
@@ -658,42 +170,30 @@
   </header>
 
   <div class="main-content">
-
-    <!-- REMINDER BANNER -->
     <div id="reminder-banner">
-      <span class="bell">🔔</span>
+      <span style="font-size:16px;">🔔</span>
       <span id="reminder-text"></span>
     </div>
 
-    <!-- HOME: room selection -->
     <div id="screen-home" class="screen active">
-      <div class="section-header">
-        <div class="section-title">Select a room</div>
-      </div>
+      <div class="section-header"><div class="section-title">Select a room</div></div>
       <div class="room-grid" id="room-grid"></div>
-      <div class="empty-state" id="no-rooms" style="display:none;">
-        <div class="empty-icon">🏠</div>
-        No rooms configured yet. Ask your admin to add rooms.
-      </div>
+      <div class="empty-state" id="no-rooms" style="display:none;"><div class="empty-icon">🏠</div>No rooms yet. Ask admin to add rooms.</div>
     </div>
 
-    <!-- INSPECTION -->
     <div id="screen-inspection" class="screen">
       <div class="section-header">
         <div>
           <div style="font-size:13px;color:var(--text3);font-family:var(--mono);margin-bottom:2px;" id="insp-room-label"></div>
-          <div class="section-title" id="insp-title">Inspection</div>
+          <div class="section-title">Weekly inspection</div>
         </div>
         <button class="btn btn-sm" onclick="cancelInspection()">Cancel</button>
       </div>
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-fill" id="insp-progress" style="width:0%"></div>
-      </div>
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" id="insp-progress" style="width:0%"></div></div>
       <div id="insp-step-label" style="font-size:13px;color:var(--text3);font-family:var(--mono);margin-bottom:16px;"></div>
       <div id="item-card-wrap"></div>
     </div>
 
-    <!-- RESULTS -->
     <div id="screen-results" class="screen">
       <div class="section-header">
         <div class="section-title">Inspection complete</div>
@@ -703,31 +203,23 @@
         </div>
       </div>
       <div class="card" id="results-summary"></div>
-      <div class="card">
-        <div class="card-title">All items</div>
-        <table id="results-table"></table>
-      </div>
+      <div class="card"><div class="card-title">All items</div><table id="results-table"></table></div>
     </div>
 
-    <!-- HISTORY -->
     <div id="screen-history" class="screen">
-      <div class="section-header">
-        <div class="section-title">Inspection history</div>
-      </div>
+      <div class="section-header"><div class="section-title">Inspection history</div></div>
       <div id="history-list"></div>
     </div>
 
-    <!-- ADMIN -->
     <div id="screen-admin" class="screen">
       <div class="section-title" style="margin-bottom:20px;">Admin panel</div>
       <div class="admin-tabs">
         <button class="admin-tab active" onclick="adminTab('rooms')">Rooms</button>
         <button class="admin-tab" onclick="adminTab('supplies')">Supplies</button>
         <button class="admin-tab" onclick="adminTab('users')">Users</button>
+        <button class="admin-tab" onclick="adminTab('import')">Import</button>
         <button class="admin-tab" onclick="adminTab('settings')">Settings</button>
       </div>
-
-      <!-- ROOMS -->
       <div id="admin-rooms" class="admin-section active">
         <div class="flex items-center justify-between mb-16">
           <div style="font-size:14px;color:var(--text2);">Manage lab rooms</div>
@@ -735,19 +227,13 @@
         </div>
         <div id="admin-room-list"></div>
       </div>
-
-      <!-- SUPPLIES -->
       <div id="admin-supplies" class="admin-section">
         <div class="flex items-center justify-between mb-16">
-          <select id="supply-room-filter" onchange="renderAdminSupplies()" style="width:auto;min-width:160px;">
-            <option value="">All rooms</option>
-          </select>
+          <select id="supply-room-filter" onchange="renderAdminSupplies()" style="width:auto;min-width:160px;"></select>
           <button class="btn btn-sm btn-primary" onclick="openAddSupply()">+ Add supply</button>
         </div>
         <div id="admin-supply-list"></div>
       </div>
-
-      <!-- USERS -->
       <div id="admin-users" class="admin-section">
         <div class="flex items-center justify-between mb-16">
           <div style="font-size:14px;color:var(--text2);">Staff PINs (4-digit)</div>
@@ -755,24 +241,18 @@
         </div>
         <div id="admin-user-list"></div>
       </div>
-
-      <!-- SETTINGS -->
       <div id="admin-settings" class="admin-section">
         <div class="card">
           <div class="card-title">Weekly reminder</div>
           <div class="field">
             <label>Inspection due day</label>
             <select id="due-day-select" onchange="saveDueDay()">
-              <option value="1">Monday</option>
-              <option value="2">Tuesday</option>
-              <option value="3">Wednesday</option>
-              <option value="4">Thursday</option>
-              <option value="5">Friday</option>
-              <option value="6">Saturday</option>
-              <option value="0">Sunday</option>
+              <option value="1">Monday</option><option value="2">Tuesday</option>
+              <option value="3">Wednesday</option><option value="4">Thursday</option>
+              <option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
             </select>
           </div>
-          <div class="text-muted">Users will see a reminder banner the day before this day when they log in.</div>
+          <div class="text-muted">Users see a reminder banner the day before this day.</div>
         </div>
         <div class="card">
           <div class="card-title">Change admin PIN</div>
@@ -783,102 +263,105 @@
           <button class="btn btn-sm btn-primary" onclick="changeAdminPin()">Update PIN</button>
         </div>
       </div>
+      <div id="admin-import" class="admin-section">
+        <div class="card">
+          <div class="card-title">Import from Excel</div>
+          <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">Upload your Excel file to automatically populate rooms and supplies. This will <strong>replace all existing rooms and supplies</strong> — inspection history is kept.</p>
+          <div style="background:var(--surface2);border-radius:var(--radius);padding:16px;margin-bottom:16px;font-size:13px;color:var(--text2);">
+            <strong>Expected format:</strong> Column A = item number, Column B = item name. Room names appear as header rows (no number in column A). A third column (Min Qty) is optional.
+          </div>
+          <div class="field">
+            <label>Select Excel file (.xlsx)</label>
+            <input type="file" id="import-file" accept=".xlsx" onchange="previewImport(this)" style="padding:8px;" />
+          </div>
+          <div id="import-preview" style="display:none;">
+            <div class="divider"></div>
+            <div class="card-title" style="margin-top:8px;">Preview</div>
+            <div id="import-preview-content"></div>
+            <div style="display:flex;gap:10px;margin-top:16px;">
+              <button class="btn btn-primary" onclick="confirmImport()">Import now</button>
+              <button class="btn" onclick="cancelImport()">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Download template</div>
+          <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">Download a template with your current items plus a Min Qty column you can fill in and re-import.</p>
+          <button class="btn btn-sm" onclick="downloadTemplate()">Download template</button>
+        </div>
+      </div>
     </div>
-
   </div>
 </div>
 
-<!-- MODAL OVERLAY -->
-<div id="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.35); z-index:200; align-items:center; justify-content:center; padding:20px;">
-  <div id="modal-box" style="background:var(--surface); border-radius:var(--radius-lg); padding:28px; max-width:420px; width:100%; max-height:90vh; overflow-y:auto; border:1px solid var(--border);">
+<div id="modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:200;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--surface);border-radius:var(--radius-lg);padding:28px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto;border:1px solid var(--border);">
     <div id="modal-content"></div>
   </div>
 </div>
 
 <script>
-// ── STATE ──
-let db = JSON.parse(localStorage.getItem('labstock_db') || 'null') || {
-  adminPin: '1234',
-  users: [{ name: 'Staff', pin: '0000' }],
-  rooms: [
-    { id: 'r1', name: 'Lab 101', icon: '🧪' },
-    { id: 'r2', name: 'Lab 102', icon: '🔬' },
-    { id: 'r3', name: 'Storage A', icon: '📦' }
-  ],
-  supplies: [
-    { id: 's1', roomId: 'r1', name: 'Nitrile Gloves (M)', unit: 'boxes', min: 3 },
-    { id: 's2', roomId: 'r1', name: 'Ethanol 70%', unit: 'bottles', min: 2 },
-    { id: 's3', roomId: 'r1', name: 'Pipette Tips 200µL', unit: 'racks', min: 5 },
-    { id: 's4', roomId: 'r2', name: 'Lab Coats', unit: 'pcs', min: 4 },
-    { id: 's5', roomId: 'r2', name: 'Safety Goggles', unit: 'pcs', min: 6 },
-    { id: 's6', roomId: 'r3', name: 'Sterile Tubes', unit: 'boxes', min: 10 },
-  ],
-  history: [],
-  dueDayOfWeek: 5,
-};
+const SUPABASE_URL = 'https://odipiepbhnabcdjofgfc.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9kaXBpZXBiaG5hYmNkam9mZ2ZjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUzMTEzNzQsImV4cCI6MjA5MDg4NzM3NH0.lVvAgU3s1HHJiUi_Nwk2TLhA7bAgyiR_PDXYQcxJgtc';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let session = { role: null, username: null };
+let session = {};
 let currentPin = '';
 let loginRole = 'user';
-let inspection = { roomId: null, items: [], index: 0, results: [] };
+let inspection = {};
+let cache = { rooms: [], supplies: [], settings: {} };
 
-function save() {
-  localStorage.setItem('labstock_db', JSON.stringify(db));
-}
-
-function uid() {
-  return 'id' + Math.random().toString(36).slice(2, 9);
-}
-
-// ── LOGIN ──
-function setLoginRole(role) {
-  loginRole = role;
-  document.querySelectorAll('.role-tab').forEach((t, i) => {
-    t.classList.toggle('active', (i === 0 && role === 'user') || (i === 1 && role === 'admin'));
-  });
-  pinClear();
-}
-
-function pinPress(digit) {
-  if (currentPin.length >= 4) return;
-  currentPin += digit;
-  updatePinDots();
-  if (currentPin.length === 4) setTimeout(tryLogin, 180);
-}
-
-function pinBackspace() {
-  currentPin = currentPin.slice(0, -1);
-  updatePinDots();
-}
-
-function pinClear() {
-  currentPin = '';
-  updatePinDots();
-  document.getElementById('login-error').textContent = '';
-}
-
-function updatePinDots() {
-  for (let i = 0; i < 4; i++) {
-    document.getElementById('dot-' + i).classList.toggle('filled', i < currentPin.length);
+async function init() {
+  try {
+    const [r, s, cfg] = await Promise.all([
+      sb.from('rooms').select('*').order('created_at'),
+      sb.from('supplies').select('*').order('created_at'),
+      sb.from('settings').select('*')
+    ]);
+    cache.rooms = r.data || [];
+    cache.supplies = s.data || [];
+    cache.settings = {};
+    (cfg.data || []).forEach(x => cache.settings[x.key] = x.value);
+    document.getElementById('global-loader').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  } catch(e) {
+    document.querySelector('.loader-text').textContent = 'Connection failed. Check your internet.';
   }
 }
 
-function tryLogin() {
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function setLoginRole(role) {
+  loginRole = role;
+  document.querySelectorAll('.role-tab').forEach((t,i) =>
+    t.classList.toggle('active', (i===0&&role==='user')||(i===1&&role==='admin')));
+  pinClear();
+}
+
+function pinPress(d) {
+  if (currentPin.length >= 4) return;
+  currentPin += d; updatePinDots();
+  if (currentPin.length === 4) setTimeout(tryLogin, 180);
+}
+function pinBackspace() { currentPin = currentPin.slice(0,-1); updatePinDots(); }
+function pinClear() { currentPin = ''; updatePinDots(); document.getElementById('login-error').textContent = ''; }
+function updatePinDots() {
+  for (let i=0;i<4;i++) document.getElementById('dot-'+i).classList.toggle('filled', i<currentPin.length);
+}
+
+async function tryLogin() {
+  const err = document.getElementById('login-error');
   if (loginRole === 'admin') {
-    if (currentPin === db.adminPin) {
-      startSession('admin', 'Admin');
-    } else {
-      document.getElementById('login-error').textContent = 'Incorrect admin PIN';
-      pinClear();
-    }
+    if (currentPin === (cache.settings['admin_pin'] || '1234')) startSession('admin','Admin');
+    else { err.textContent = 'Incorrect admin PIN'; pinClear(); }
   } else {
-    const user = db.users.find(u => u.pin === currentPin);
-    if (user) {
-      startSession('user', user.name);
-    } else {
-      document.getElementById('login-error').textContent = 'Incorrect PIN';
-      pinClear();
-    }
+    const { data } = await sb.from('users').select('*').eq('pin', currentPin).single();
+    if (data) startSession('user', data.name);
+    else { err.textContent = 'Incorrect PIN'; pinClear(); }
   }
 }
 
@@ -887,264 +370,231 @@ function startSession(role, name) {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('user-badge').textContent = name;
-  document.getElementById('admin-nav-btn').style.display = role === 'admin' ? 'inline-block' : 'none';
-  showScreen('home');
-  checkReminder();
+  document.getElementById('admin-nav-btn').style.display = role==='admin' ? 'inline-block' : 'none';
+  showScreen('home'); checkReminder();
 }
 
 function logout() {
-  session = { role: null, username: null };
-  currentPin = '';
-  updatePinDots();
+  session = {}; currentPin = ''; updatePinDots();
   document.getElementById('login-error').textContent = '';
-  document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
 }
 
-// ── REMINDER ──
 function checkReminder() {
   const today = new Date().getDay();
-  const due = parseInt(db.dueDayOfWeek);
-  const dayBefore = (due - 1 + 7) % 7;
+  const due = parseInt(cache.settings['due_day'] || 5);
+  const dayBefore = (due-1+7)%7;
   const banner = document.getElementById('reminder-banner');
   if (today === dayBefore) {
     const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     document.getElementById('reminder-text').textContent =
       `Reminder: Supply inventory is due tomorrow (${days[due]}). Please complete your inspection today.`;
     banner.style.display = 'flex';
-  } else {
-    banner.style.display = 'none';
-  }
+  } else banner.style.display = 'none';
 }
 
-// ── SCREENS ──
 function showScreen(name) {
   document.querySelectorAll('#app .screen').forEach(s => s.classList.remove('active'));
-  document.getElementById('screen-' + name).classList.add('active');
+  document.getElementById('screen-'+name).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  const navMap = { home: 0, history: 1, admin: 2 };
-  const navBtns = document.querySelectorAll('.nav-btn');
-  if (name === 'home') navBtns[0].classList.add('active');
-  else if (name === 'history') navBtns[1].classList.add('active');
-  else if (name === 'admin') navBtns[2] && navBtns[2].classList.add('active');
-
-  if (name === 'home') renderRooms();
-  if (name === 'history') renderHistory();
-  if (name === 'admin') renderAdminAll();
+  const btns = document.querySelectorAll('.nav-btn');
+  if (name==='home') btns[0].classList.add('active');
+  else if (name==='history') btns[1].classList.add('active');
+  else if (name==='admin' && btns[2]) btns[2].classList.add('active');
+  if (name==='home') renderRooms();
+  if (name==='history') renderHistory();
+  if (name==='admin') renderAdminAll();
 }
 
-// ── HOME ──
 function renderRooms() {
   const grid = document.getElementById('room-grid');
   const empty = document.getElementById('no-rooms');
-  if (!db.rooms.length) { grid.innerHTML = ''; empty.style.display = 'block'; return; }
+  if (!cache.rooms.length) { grid.innerHTML=''; empty.style.display='block'; return; }
   empty.style.display = 'none';
-  grid.innerHTML = db.rooms.map(r => {
-    const count = db.supplies.filter(s => s.roomId === r.id).length;
+  grid.innerHTML = cache.rooms.map(r => {
+    const cnt = cache.supplies.filter(s=>s.room_id===r.id).length;
     return `<div class="room-card" onclick="startInspection('${r.id}')">
-      <div class="room-icon">${r.icon || '🧪'}</div>
+      <div class="room-icon">${r.icon||'🧪'}</div>
       <div class="room-name">${r.name}</div>
-      <div class="room-count">${count} item${count !== 1 ? 's' : ''}</div>
+      <div class="room-count">${cnt} item${cnt!==1?'s':''}</div>
     </div>`;
   }).join('');
 }
 
-// ── INSPECTION ──
 function startInspection(roomId) {
-  const room = db.rooms.find(r => r.id === roomId);
-  const items = db.supplies.filter(s => s.roomId === roomId);
-  if (!items.length) { alert('No supplies configured for this room. Ask admin to add items.'); return; }
-  inspection = { roomId, room, items, index: 0, results: [] };
+  const room = cache.rooms.find(r=>r.id===roomId);
+  const items = cache.supplies.filter(s=>s.room_id===roomId);
+  if (!items.length) { toast('No supplies in this room. Ask admin to add items.'); return; }
+  inspection = { roomId, room, items, index:0, results:[] };
   document.getElementById('insp-room-label').textContent = room.name;
-  document.getElementById('insp-title').textContent = 'Weekly inspection';
-  showScreen('inspection');
-  renderInspectionStep();
+  showScreen('inspection'); renderInspectionStep();
 }
 
 function renderInspectionStep() {
   const { items, index } = inspection;
-  const pct = Math.round((index / items.length) * 100);
-  document.getElementById('insp-progress').style.width = pct + '%';
-  document.getElementById('insp-step-label').textContent = `Item ${index + 1} of ${items.length}`;
+  document.getElementById('insp-progress').style.width = Math.round(index/items.length*100)+'%';
+  document.getElementById('insp-step-label').textContent = `Item ${index+1} of ${items.length}`;
   const item = items[index];
   document.getElementById('item-card-wrap').innerHTML = `
     <div class="item-card">
       <div class="item-name-big">${item.name}</div>
-      <div class="item-meta">Minimum required: ${item.min} ${item.unit}</div>
+      <div class="item-meta">Minimum required: ${item.min_qty} ${item.unit}</div>
       <div class="qty-input-wrap">
         <button class="qty-btn" onclick="adjustQty(-1)">−</button>
-        <input class="qty-input-big" type="number" id="qty-input" value="0" min="0" />
+        <input class="qty-input-big" type="number" id="qty-input" value="0" min="0"/>
         <button class="qty-btn" onclick="adjustQty(1)">+</button>
       </div>
       <div style="display:flex;gap:10px;justify-content:center;">
-        ${index > 0 ? `<button class="btn" onclick="prevItem()">← Back</button>` : ''}
-        <button class="btn btn-primary" onclick="nextItem()">${index === items.length - 1 ? 'Finish →' : 'Next →'}</button>
+        ${index>0?`<button class="btn" onclick="prevItem()">← Back</button>`:''}
+        <button class="btn btn-primary" onclick="nextItem()">${index===items.length-1?'Finish →':'Next →'}</button>
       </div>
     </div>`;
   document.getElementById('qty-input').focus();
 }
 
-function adjustQty(delta) {
+function adjustQty(d) {
   const inp = document.getElementById('qty-input');
-  inp.value = Math.max(0, parseInt(inp.value || 0) + delta);
+  inp.value = Math.max(0, parseInt(inp.value||0)+d);
 }
 
 function nextItem() {
-  const qty = parseInt(document.getElementById('qty-input').value) || 0;
+  const qty = parseInt(document.getElementById('qty-input').value)||0;
   const item = inspection.items[inspection.index];
-  inspection.results[inspection.index] = { ...item, qty, low: qty < item.min };
-  if (inspection.index < inspection.items.length - 1) {
-    inspection.index++;
-    renderInspectionStep();
-  } else {
-    finishInspection();
-  }
+  inspection.results[inspection.index] = {...item, qty, low: qty<item.min_qty};
+  if (inspection.index < inspection.items.length-1) { inspection.index++; renderInspectionStep(); }
+  else finishInspection();
 }
 
 function prevItem() {
-  const qty = parseInt(document.getElementById('qty-input').value) || 0;
+  const qty = parseInt(document.getElementById('qty-input').value)||0;
   const item = inspection.items[inspection.index];
-  inspection.results[inspection.index] = { ...item, qty, low: qty < item.min };
-  inspection.index--;
-  renderInspectionStep();
+  inspection.results[inspection.index] = {...item, qty, low: qty<item.min_qty};
+  inspection.index--; renderInspectionStep();
 }
 
 function cancelInspection() {
   if (confirm('Cancel this inspection? Progress will be lost.')) showScreen('home');
 }
 
-function finishInspection() {
+async function finishInspection() {
   const record = {
-    id: uid(),
-    roomId: inspection.roomId,
-    roomName: inspection.room.name,
-    date: new Date().toISOString(),
-    user: session.username,
-    results: inspection.results,
-    flagCount: inspection.results.filter(r => r.low).length
+    room_id: inspection.roomId, room_name: inspection.room.name,
+    inspector: session.username,
+    flag_count: inspection.results.filter(r=>r.low).length,
+    results: inspection.results
   };
-  db.history.unshift(record);
-  save();
-  showResults(record);
+  const { data, error } = await sb.from('inspections').insert(record).select().single();
+  if (error) { toast('Error saving. Check connection.'); return; }
+  showResults(data);
 }
 
-// ── RESULTS ──
 function showResults(record) {
-  const low = record.results.filter(r => r.low);
+  const results = record.results || [];
+  const low = results.filter(r=>r.low);
   document.getElementById('results-summary').innerHTML = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;text-align:center;">
-      <div><div style="font-size:24px;font-weight:600;">${record.results.length}</div><div class="text-muted">Total items</div></div>
-      <div><div style="font-size:24px;font-weight:600;color:var(--accent);">${record.results.length - low.length}</div><div class="text-muted">OK</div></div>
+      <div><div style="font-size:24px;font-weight:600;">${results.length}</div><div class="text-muted">Total</div></div>
+      <div><div style="font-size:24px;font-weight:600;color:var(--accent);">${results.length-low.length}</div><div class="text-muted">OK</div></div>
       <div><div style="font-size:24px;font-weight:600;color:var(--accent2);">${low.length}</div><div class="text-muted">Need restock</div></div>
     </div>
     <div class="divider"></div>
-    <div style="font-size:13px;color:var(--text3);font-family:var(--mono);">${record.roomName} · ${new Date(record.date).toLocaleString()} · ${record.user}</div>`;
-
-  let rows = record.results.map(r => `
-    <tr class="${r.low ? 'flag-red' : ''}">
-      <td><strong>${r.name}</strong></td>
-      <td style="font-family:var(--mono);">${r.qty} ${r.unit}</td>
-      <td style="font-family:var(--mono);color:var(--text3);">${r.min}</td>
-      <td><span class="badge ${r.low ? 'badge-low' : 'badge-ok'}">${r.low ? 'LOW' : 'OK'}</span></td>
-    </tr>`).join('');
-
+    <div style="font-size:13px;color:var(--text3);font-family:var(--mono);">${record.room_name} · ${new Date(record.inspected_at).toLocaleString()} · ${record.inspector}</div>`;
   document.getElementById('results-table').innerHTML = `
     <thead><tr><th>Item</th><th>Count</th><th>Min</th><th>Status</th></tr></thead>
-    <tbody>${rows}</tbody>`;
-
-  document.querySelectorAll('#app .screen').forEach(s => s.classList.remove('active'));
+    <tbody>${results.map(r=>`
+      <tr class="${r.low?'flag-red':''}">
+        <td><strong>${r.name}</strong></td>
+        <td style="font-family:var(--mono);">${r.qty} ${r.unit}</td>
+        <td style="font-family:var(--mono);color:var(--text3);">${r.min_qty}</td>
+        <td><span class="badge ${r.low?'badge-low':'badge-ok'}">${r.low?'LOW':'OK'}</span></td>
+      </tr>`).join('')}
+    </tbody>`;
+  document.querySelectorAll('#app .screen').forEach(s=>s.classList.remove('active'));
   document.getElementById('screen-results').classList.add('active');
-  window._currentRecord = record;
+  window._rec = record;
 }
 
 function exportExcel() {
-  const record = window._currentRecord;
-  if (!record) return;
+  const rec = window._rec; if (!rec) return;
+  const results = rec.results||[];
   const data = [
     ['LabStock — Supply Inspection Report'],
-    ['Room:', record.roomName],
-    ['Date:', new Date(record.date).toLocaleString()],
-    ['Inspector:', record.user],
-    [],
-    ['Item', 'Unit', 'Count', 'Minimum Required', 'Status'],
-    ...record.results.map(r => [r.name, r.unit, r.qty, r.min, r.low ? 'NEEDS RESTOCK' : 'OK'])
+    ['Room:', rec.room_name],['Date:', new Date(rec.inspected_at).toLocaleString()],['Inspector:', rec.inspector],[],
+    ['Item','Unit','Count','Minimum','Status'],
+    ...results.map(r=>[r.name, r.unit, r.qty, r.min_qty, r.low?'NEEDS RESTOCK':'OK'])
   ];
-  if (record.results.some(r => r.low)) {
-    data.push([]);
-    data.push(['ITEMS NEEDING RESTOCK']);
-    record.results.filter(r => r.low).forEach(r => {
-      data.push([r.name, r.unit, 'Current: ' + r.qty, 'Minimum: ' + r.min, 'Shortage: ' + (r.min - r.qty)]);
-    });
+  if (results.some(r=>r.low)) {
+    data.push([],['ITEMS NEEDING RESTOCK']);
+    results.filter(r=>r.low).forEach(r=>data.push([r.name, r.unit, 'Current: '+r.qty, 'Min: '+r.min_qty, 'Shortage: '+(r.min_qty-r.qty)]));
   }
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{ wch: 30 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 16 }];
+  ws['!cols']=[{wch:30},{wch:12},{wch:10},{wch:12},{wch:16}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inspection');
-  const fname = `LabStock_${record.roomName.replace(/\s+/g,'_')}_${new Date(record.date).toLocaleDateString('en-CA')}.xlsx`;
-  XLSX.writeFile(wb, fname);
+  XLSX.writeFile(wb, `LabStock_${rec.room_name.replace(/\s+/g,'_')}_${new Date(rec.inspected_at).toLocaleDateString('en-CA')}.xlsx`);
 }
 
-// ── HISTORY ──
-function renderHistory() {
+async function renderHistory() {
   const el = document.getElementById('history-list');
-  if (!db.history.length) {
-    el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div>No inspections yet.</div>';
-    return;
-  }
-  el.innerHTML = db.history.map(rec => `
+  el.innerHTML = '<div class="empty-state"><div class="spinner" style="margin:0 auto;"></div></div>';
+  const { data } = await sb.from('inspections').select('*').order('inspected_at',{ascending:false}).limit(50);
+  if (!data||!data.length) { el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div>No inspections yet.</div>'; return; }
+  el.innerHTML = data.map(rec=>`
     <div class="history-item" onclick="viewHistoryRecord('${rec.id}')">
       <div>
-        <div class="history-title">${rec.roomName}</div>
-        <div class="history-meta">${new Date(rec.date).toLocaleString()} · ${rec.user}</div>
+        <div class="history-title">${rec.room_name}</div>
+        <div class="history-meta">${new Date(rec.inspected_at).toLocaleString()} · ${rec.inspector}</div>
       </div>
-      <div>
-        ${rec.flagCount > 0 ? `<div class="history-flags">${rec.flagCount} low item${rec.flagCount > 1 ? 's' : ''}</div>` : '<div style="font-size:12px;color:var(--accent);font-weight:500;">All OK</div>'}
-        <div style="font-size:11px;color:var(--text3);text-align:right;margin-top:2px;">tap to view →</div>
+      <div style="text-align:right;">
+        ${rec.flag_count>0
+          ?`<div style="font-size:12px;color:var(--accent2);font-weight:500;">${rec.flag_count} low item${rec.flag_count>1?'s':''}</div>`
+          :'<div style="font-size:12px;color:var(--accent);font-weight:500;">All OK</div>'}
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">tap to view →</div>
       </div>
     </div>`).join('');
 }
 
-function viewHistoryRecord(id) {
-  const rec = db.history.find(r => r.id === id);
-  if (rec) { window._currentRecord = rec; showResults(rec); }
+async function viewHistoryRecord(id) {
+  const { data } = await sb.from('inspections').select('*').eq('id',id).single();
+  if (data) { window._rec = data; showResults(data); }
 }
 
-// ── ADMIN ──
-function adminTab(name) {
-  document.querySelectorAll('.admin-tab').forEach((t, i) => {
-    t.classList.toggle('active', t.textContent.toLowerCase().startsWith(name));
-  });
-  document.querySelectorAll('.admin-section').forEach(s => s.classList.remove('active'));
-  document.getElementById('admin-' + name).classList.add('active');
-  if (name === 'rooms') renderAdminRooms();
-  if (name === 'supplies') renderAdminSupplies();
-  if (name === 'users') renderAdminUsers();
-  if (name === 'settings') renderAdminSettings();
+async function refreshCache() {
+  const [r,s,cfg] = await Promise.all([
+    sb.from('rooms').select('*').order('created_at'),
+    sb.from('supplies').select('*').order('created_at'),
+    sb.from('settings').select('*')
+  ]);
+  cache.rooms = r.data||[]; cache.supplies = s.data||[]; cache.settings={};
+  (cfg.data||[]).forEach(x=>cache.settings[x.key]=x.value);
 }
 
-function renderAdminAll() {
-  renderAdminRooms();
-  renderAdminSettings();
+async function renderAdminAll() {
+  await refreshCache();
   const filter = document.getElementById('supply-room-filter');
-  filter.innerHTML = '<option value="">All rooms</option>' +
-    db.rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('');
-  renderAdminSupplies();
-  renderAdminUsers();
+  const prev = filter.value;
+  filter.innerHTML = '<option value="">All rooms</option>'+cache.rooms.map(r=>`<option value="${r.id}">${r.name}</option>`).join('');
+  if (prev) filter.value = prev;
+  renderAdminRooms(); renderAdminSupplies(); renderAdminUsers(); renderAdminSettings();
+}
+
+function adminTab(name) {
+  document.querySelectorAll('.admin-tab').forEach(t=>t.classList.toggle('active', t.textContent.toLowerCase()===name));
+  document.querySelectorAll('.admin-section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('admin-'+name).classList.add('active');
 }
 
 function renderAdminRooms() {
   const el = document.getElementById('admin-room-list');
-  if (!db.rooms.length) { el.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="empty-icon">🏠</div>No rooms yet.</div>'; return; }
-  el.innerHTML = db.rooms.map(r => {
-    const count = db.supplies.filter(s => s.roomId === r.id).length;
+  if (!cache.rooms.length) { el.innerHTML='<div class="empty-state" style="padding:24px;"><div class="empty-icon">🏠</div>No rooms yet.</div>'; return; }
+  el.innerHTML = cache.rooms.map(r=>{
+    const cnt = cache.supplies.filter(s=>s.room_id===r.id).length;
     return `<div class="card" style="padding:14px 18px;margin-bottom:10px;">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-12">
-          <span style="font-size:22px;">${r.icon || '🧪'}</span>
-          <div>
-            <div style="font-weight:600;">${r.name}</div>
-            <div class="text-muted">${count} supplies</div>
-          </div>
+          <span style="font-size:22px;">${r.icon||'🧪'}</span>
+          <div><div style="font-weight:600;">${r.name}</div><div class="text-muted">${cnt} supplies</div></div>
         </div>
         <div style="display:flex;gap:8px;">
           <button class="btn btn-sm" onclick="editRoom('${r.id}')">Edit</button>
@@ -1158,24 +608,21 @@ function renderAdminRooms() {
 function renderAdminSupplies() {
   const el = document.getElementById('admin-supply-list');
   const filterRoom = document.getElementById('supply-room-filter').value;
-  let supplies = filterRoom ? db.supplies.filter(s => s.roomId === filterRoom) : db.supplies;
-  if (!supplies.length) { el.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="empty-icon">📦</div>No supplies yet.</div>'; return; }
+  let supplies = filterRoom ? cache.supplies.filter(s=>s.room_id===filterRoom) : cache.supplies;
+  if (!supplies.length) { el.innerHTML='<div class="empty-state" style="padding:24px;"><div class="empty-icon">📦</div>No supplies yet.</div>'; return; }
   const byRoom = {};
-  supplies.forEach(s => {
-    const rname = db.rooms.find(r => r.id === s.roomId)?.name || 'Unknown';
-    if (!byRoom[rname]) byRoom[rname] = [];
+  supplies.forEach(s=>{
+    const rname = cache.rooms.find(r=>r.id===s.room_id)?.name||'Unknown';
+    if (!byRoom[rname]) byRoom[rname]=[];
     byRoom[rname].push(s);
   });
-  el.innerHTML = Object.entries(byRoom).map(([room, items]) => `
+  el.innerHTML = Object.entries(byRoom).map(([room,items])=>`
     <div style="margin-bottom:8px;">
       <div style="font-size:12px;font-weight:500;color:var(--text3);font-family:var(--mono);padding:6px 0;text-transform:uppercase;letter-spacing:0.06em;">${room}</div>
-      ${items.map(s => `
+      ${items.map(s=>`
         <div class="card" style="padding:12px 16px;margin-bottom:8px;">
           <div class="flex items-center justify-between">
-            <div>
-              <div style="font-weight:500;">${s.name}</div>
-              <div class="text-muted">Min: ${s.min} ${s.unit}</div>
-            </div>
+            <div><div style="font-weight:500;">${s.name}</div><div class="text-muted">Min: ${s.min_qty} ${s.unit}</div></div>
             <div style="display:flex;gap:8px;">
               <button class="btn btn-sm" onclick="editSupply('${s.id}')">Edit</button>
               <button class="btn btn-sm" style="color:var(--accent2);border-color:var(--accent2);" onclick="deleteSupply('${s.id}')">Delete</button>
@@ -1185,19 +632,20 @@ function renderAdminSupplies() {
     </div>`).join('');
 }
 
-function renderAdminUsers() {
+async function renderAdminUsers() {
   const el = document.getElementById('admin-user-list');
-  if (!db.users.length) { el.innerHTML = '<div class="empty-state" style="padding:24px;"><div class="empty-icon">👤</div>No users yet.</div>'; return; }
-  el.innerHTML = db.users.map((u, i) => `
+  const { data } = await sb.from('users').select('*').order('name');
+  if (!data||!data.length) { el.innerHTML='<div class="empty-state" style="padding:24px;"><div class="empty-icon">👤</div>No users yet.</div>'; return; }
+  el.innerHTML = data.map(u=>`
     <div class="card" style="padding:12px 18px;margin-bottom:10px;">
       <div class="flex items-center justify-between">
         <div>
           <div style="font-weight:500;">${u.name}</div>
-          <div style="font-family:var(--mono);font-size:12px;color:var(--text3);">PIN: ${'●'.repeat(4)}</div>
+          <div style="font-family:var(--mono);font-size:12px;color:var(--text3);">PIN: ●●●●</div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-sm" onclick="editUser(${i})">Edit</button>
-          <button class="btn btn-sm" style="color:var(--accent2);border-color:var(--accent2);" onclick="deleteUser(${i})">Delete</button>
+          <button class="btn btn-sm" onclick="editUser('${u.id}','${u.name}')">Edit</button>
+          <button class="btn btn-sm" style="color:var(--accent2);border-color:var(--accent2);" onclick="deleteUser('${u.id}')">Delete</button>
         </div>
       </div>
     </div>`).join('');
@@ -1205,190 +653,323 @@ function renderAdminUsers() {
 
 function renderAdminSettings() {
   const sel = document.getElementById('due-day-select');
-  if (sel) sel.value = db.dueDayOfWeek;
+  if (sel) sel.value = cache.settings['due_day']||'5';
 }
 
-function saveDueDay() {
-  db.dueDayOfWeek = parseInt(document.getElementById('due-day-select').value);
-  save();
+async function saveDueDay() {
+  const val = document.getElementById('due-day-select').value;
+  await sb.from('settings').upsert({key:'due_day',value:val});
+  cache.settings['due_day'] = val; toast('Reminder day saved.');
 }
 
-function changeAdminPin() {
+async function changeAdminPin() {
   const val = document.getElementById('new-admin-pin').value;
-  if (!/^\d{4}$/.test(val)) { alert('PIN must be exactly 4 digits.'); return; }
-  db.adminPin = val;
-  save();
+  if (!/^\d{4}$/.test(val)) { toast('PIN must be exactly 4 digits.'); return; }
+  await sb.from('settings').upsert({key:'admin_pin',value:val});
+  cache.settings['admin_pin'] = val;
   document.getElementById('new-admin-pin').value = '';
-  alert('Admin PIN updated.');
+  toast('Admin PIN updated.');
 }
 
-// ── MODAL ──
 function openModal(html) {
   document.getElementById('modal-content').innerHTML = html;
   document.getElementById('modal-overlay').style.display = 'flex';
 }
+function closeModal() { document.getElementById('modal-overlay').style.display = 'none'; }
+document.getElementById('modal-overlay').addEventListener('click', function(e){ if(e.target===this) closeModal(); });
 
-function closeModal() {
-  document.getElementById('modal-overlay').style.display = 'none';
-}
-
-document.getElementById('modal-overlay').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
-});
-
-// ── ROOM CRUD ──
 const ICONS = ['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰'];
 
+function iconPicker(selected) {
+  return ICONS.map(ic=>`<button onclick="selectIcon(this,'${ic}')" data-icon="${ic}" style="font-size:22px;padding:6px;border:2px solid ${ic===selected?'var(--accent)':'var(--border)'};border-radius:8px;background:var(--surface);cursor:pointer;">${ic}</button>`).join('');
+}
+
 function openAddRoom() {
-  openModal(`
-    <div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add room</div>
-    <div class="field"><label>Room name</label><input id="m-room-name" placeholder="e.g. Lab 201" /></div>
-    <div class="field"><label>Icon</label>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
-        ${ICONS.map(ic => `<button onclick="selectIcon(this,'${ic}')" style="font-size:22px;padding:6px;border:2px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer;" data-icon="${ic}">${ic}</button>`).join('')}
-      </div>
-    </div>
+  window._editRoomId = null; window._selIcon = '🧪';
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add room</div>
+    <div class="field"><label>Room name</label><input id="m-room-name" placeholder="e.g. Lab 201"/></div>
+    <div class="field"><label>Icon</label><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">${iconPicker('🧪')}</div></div>
     <div style="display:flex;gap:10px;margin-top:20px;">
       <button class="btn btn-primary" onclick="saveRoom()">Add room</button>
       <button class="btn" onclick="closeModal()">Cancel</button>
     </div>`);
-  window._editRoomId = null;
-  window._selectedIcon = '🧪';
-  document.querySelector('[data-icon="🧪"]').style.borderColor = 'var(--accent)';
 }
 
 function editRoom(id) {
-  const r = db.rooms.find(r => r.id === id);
-  openAddRoom();
-  document.getElementById('m-room-name').value = r.name;
-  window._editRoomId = id;
-  window._selectedIcon = r.icon || '🧪';
-  document.querySelectorAll('[data-icon]').forEach(b => {
-    b.style.borderColor = b.dataset.icon === r.icon ? 'var(--accent)' : 'var(--border)';
-  });
-  document.querySelector('.modal-title') && (document.querySelector('.modal-title').textContent = 'Edit room');
+  const r = cache.rooms.find(r=>r.id===id);
+  window._editRoomId = id; window._selIcon = r.icon||'🧪';
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Edit room</div>
+    <div class="field"><label>Room name</label><input id="m-room-name" value="${r.name}"/></div>
+    <div class="field"><label>Icon</label><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">${iconPicker(r.icon||'🧪')}</div></div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button class="btn btn-primary" onclick="saveRoom()">Save</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
 }
 
 function selectIcon(btn, icon) {
-  document.querySelectorAll('[data-icon]').forEach(b => b.style.borderColor = 'var(--border)');
-  btn.style.borderColor = 'var(--accent)';
-  window._selectedIcon = icon;
+  document.querySelectorAll('[data-icon]').forEach(b=>b.style.borderColor='var(--border)');
+  btn.style.borderColor='var(--accent)'; window._selIcon=icon;
 }
 
-function saveRoom() {
+async function saveRoom() {
   const name = document.getElementById('m-room-name').value.trim();
-  if (!name) { alert('Please enter a room name.'); return; }
-  if (window._editRoomId) {
-    const r = db.rooms.find(r => r.id === window._editRoomId);
-    r.name = name; r.icon = window._selectedIcon;
-  } else {
-    db.rooms.push({ id: uid(), name, icon: window._selectedIcon });
-  }
-  save(); closeModal(); renderAdminRooms(); renderRooms();
+  if (!name) { toast('Please enter a room name.'); return; }
+  if (window._editRoomId) await sb.from('rooms').update({name,icon:window._selIcon}).eq('id',window._editRoomId);
+  else await sb.from('rooms').insert({name,icon:window._selIcon});
+  closeModal(); await renderAdminAll(); renderRooms(); toast('Room saved.');
 }
 
-function deleteRoom(id) {
+async function deleteRoom(id) {
   if (!confirm('Delete this room and all its supplies?')) return;
-  db.rooms = db.rooms.filter(r => r.id !== id);
-  db.supplies = db.supplies.filter(s => s.roomId !== id);
-  save(); renderAdminRooms();
+  await sb.from('rooms').delete().eq('id',id);
+  await renderAdminAll(); renderRooms(); toast('Room deleted.');
 }
 
-// ── SUPPLY CRUD ──
 function openAddSupply() {
-  openModal(`
-    <div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add supply</div>
+  window._editSupplyId = null;
+  const fr = document.getElementById('supply-room-filter').value;
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add supply</div>
     <div class="field"><label>Room</label>
-      <select id="m-supply-room">
-        ${db.rooms.map(r => `<option value="${r.id}">${r.name}</option>`).join('')}
-      </select>
+      <select id="m-supply-room">${cache.rooms.map(r=>`<option value="${r.id}"${r.id===fr?' selected':''}>${r.name}</option>`).join('')}</select>
     </div>
-    <div class="field"><label>Supply name</label><input id="m-supply-name" placeholder="e.g. Nitrile Gloves (M)" /></div>
+    <div class="field"><label>Supply name</label><input id="m-supply-name" placeholder="e.g. Nitrile Gloves (M)"/></div>
     <div class="grid-2">
-      <div class="field"><label>Unit</label><input id="m-supply-unit" placeholder="e.g. boxes" /></div>
-      <div class="field"><label>Minimum quantity</label><input id="m-supply-min" type="number" min="0" placeholder="e.g. 3" /></div>
+      <div class="field"><label>Unit</label><input id="m-supply-unit" placeholder="boxes"/></div>
+      <div class="field"><label>Minimum qty</label><input id="m-supply-min" type="number" min="0" placeholder="3"/></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:20px;">
       <button class="btn btn-primary" onclick="saveSupply()">Save</button>
       <button class="btn" onclick="closeModal()">Cancel</button>
     </div>`);
-  window._editSupplyId = null;
-  const filter = document.getElementById('supply-room-filter').value;
-  if (filter) document.getElementById('m-supply-room').value = filter;
 }
 
 function editSupply(id) {
-  const s = db.supplies.find(s => s.id === id);
-  openAddSupply();
+  const s = cache.supplies.find(s=>s.id===id);
   window._editSupplyId = id;
-  document.getElementById('m-supply-room').value = s.roomId;
-  document.getElementById('m-supply-name').value = s.name;
-  document.getElementById('m-supply-unit').value = s.unit;
-  document.getElementById('m-supply-min').value = s.min;
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Edit supply</div>
+    <div class="field"><label>Room</label>
+      <select id="m-supply-room">${cache.rooms.map(r=>`<option value="${r.id}"${r.id===s.room_id?' selected':''}>${r.name}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>Supply name</label><input id="m-supply-name" value="${s.name}"/></div>
+    <div class="grid-2">
+      <div class="field"><label>Unit</label><input id="m-supply-unit" value="${s.unit}"/></div>
+      <div class="field"><label>Minimum qty</label><input id="m-supply-min" type="number" value="${s.min_qty}"/></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button class="btn btn-primary" onclick="saveSupply()">Save</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
 }
 
-function saveSupply() {
-  const roomId = document.getElementById('m-supply-room').value;
+async function saveSupply() {
+  const room_id = document.getElementById('m-supply-room').value;
   const name = document.getElementById('m-supply-name').value.trim();
   const unit = document.getElementById('m-supply-unit').value.trim();
-  const min = parseInt(document.getElementById('m-supply-min').value) || 0;
-  if (!name || !unit) { alert('Please fill all fields.'); return; }
-  if (window._editSupplyId) {
-    const s = db.supplies.find(s => s.id === window._editSupplyId);
-    Object.assign(s, { roomId, name, unit, min });
-  } else {
-    db.supplies.push({ id: uid(), roomId, name, unit, min });
-  }
-  save(); closeModal(); renderAdminSupplies();
+  const min_qty = parseInt(document.getElementById('m-supply-min').value)||0;
+  if (!name||!unit) { toast('Please fill all fields.'); return; }
+  if (window._editSupplyId) await sb.from('supplies').update({room_id,name,unit,min_qty}).eq('id',window._editSupplyId);
+  else await sb.from('supplies').insert({room_id,name,unit,min_qty});
+  closeModal(); await renderAdminAll(); toast('Supply saved.');
 }
 
-function deleteSupply(id) {
+async function deleteSupply(id) {
   if (!confirm('Delete this supply?')) return;
-  db.supplies = db.supplies.filter(s => s.id !== id);
-  save(); renderAdminSupplies();
+  await sb.from('supplies').delete().eq('id',id);
+  await renderAdminAll(); toast('Supply deleted.');
 }
 
-// ── USER CRUD ──
 function openAddUser() {
-  openModal(`
-    <div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add staff user</div>
-    <div class="field"><label>Name</label><input id="m-user-name" placeholder="e.g. Dr. Smith" /></div>
-    <div class="field"><label>PIN (4 digits)</label><input id="m-user-pin" type="password" maxlength="4" placeholder="····" style="width:120px;" /></div>
+  window._editUserId = null;
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Add staff user</div>
+    <div class="field"><label>Name</label><input id="m-user-name" placeholder="e.g. Dr. Smith"/></div>
+    <div class="field"><label>PIN (4 digits)</label><input id="m-user-pin" type="password" maxlength="4" placeholder="····" style="width:120px;"/></div>
     <div style="display:flex;gap:10px;margin-top:20px;">
       <button class="btn btn-primary" onclick="saveUser()">Save</button>
       <button class="btn" onclick="closeModal()">Cancel</button>
     </div>`);
-  window._editUserIdx = null;
 }
 
-function editUser(idx) {
-  openAddUser();
-  window._editUserIdx = idx;
-  document.getElementById('m-user-name').value = db.users[idx].name;
+function editUser(id, name) {
+  window._editUserId = id;
+  openModal(`<div style="font-weight:600;font-size:16px;margin-bottom:20px;">Edit user</div>
+    <div class="field"><label>Name</label><input id="m-user-name" value="${name}"/></div>
+    <div class="field"><label>New PIN (leave blank to keep current)</label><input id="m-user-pin" type="password" maxlength="4" placeholder="····" style="width:120px;"/></div>
+    <div style="display:flex;gap:10px;margin-top:20px;">
+      <button class="btn btn-primary" onclick="saveUser()">Save</button>
+      <button class="btn" onclick="closeModal()">Cancel</button>
+    </div>`);
 }
 
-function saveUser() {
+async function saveUser() {
   const name = document.getElementById('m-user-name').value.trim();
   const pin = document.getElementById('m-user-pin').value;
-  if (!name) { alert('Please enter a name.'); return; }
-  if (window._editUserIdx !== null) {
-    db.users[window._editUserIdx].name = name;
-    if (pin) {
-      if (!/^\d{4}$/.test(pin)) { alert('PIN must be 4 digits.'); return; }
-      db.users[window._editUserIdx].pin = pin;
-    }
+  if (!name) { toast('Please enter a name.'); return; }
+  if (window._editUserId) {
+    const upd = {name};
+    if (pin) { if (!/^\d{4}$/.test(pin)) { toast('PIN must be 4 digits.'); return; } upd.pin=pin; }
+    await sb.from('users').update(upd).eq('id',window._editUserId);
   } else {
-    if (!/^\d{4}$/.test(pin)) { alert('PIN must be 4 digits.'); return; }
-    db.users.push({ name, pin });
+    if (!/^\d{4}$/.test(pin)) { toast('PIN must be 4 digits.'); return; }
+    await sb.from('users').insert({name,pin,role:'user'});
   }
-  save(); closeModal(); renderAdminUsers();
+  closeModal(); renderAdminUsers(); toast('User saved.');
 }
 
-function deleteUser(idx) {
+async function deleteUser(id) {
   if (!confirm('Delete this user?')) return;
-  db.users.splice(idx, 1);
-  save(); renderAdminUsers();
+  await sb.from('users').delete().eq('id',id);
+  renderAdminUsers(); toast('User deleted.');
 }
+
+
+// ── KNOWN ROOM KEYWORDS — rows with these words and no item number = room headers ──
+const ROOM_KEYWORDS = ['room','lab','highbay','high bay','bay','shed','office','tool','storage','corridor','hall','area'];
+
+let _importData = null;
+
+function isRoomHeader(numVal, nameVal) {
+  if (numVal !== null && numVal !== undefined && numVal !== '') return false;
+  if (!nameVal || typeof nameVal !== 'string') return false;
+  const n = nameVal.trim().toLowerCase();
+  if (!n) return false;
+  // Skip sub-category rows: rows with no number that are short labels or contain certain keywords
+  const skipWords = ['item','no.','safety box','safety items','front cabinet','air tanks','mixing station','autoextractor','auto extractor','storage area'];
+  if (skipWords.some(w => n === w || n.startsWith(w))) return false;
+  // It's a room if it contains a room keyword OR is ALL CAPS with 3+ words
+  const hasKeyword = ROOM_KEYWORDS.some(k => n.includes(k));
+  const isAllCaps = nameVal.trim() === nameVal.trim().toUpperCase() && nameVal.trim().split(/\s+/).length >= 2;
+  return hasKeyword || isAllCaps;
+}
+
+function parseExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+        const rooms = {};
+        let currentRoom = null;
+
+        for (const row of rows) {
+          const numVal = row[0];
+          const nameVal = row[1];
+          const minVal = row[2]; // optional Min Qty column
+
+          if (!nameVal || String(nameVal).trim() === '') continue;
+
+          if (isRoomHeader(numVal, nameVal)) {
+            currentRoom = String(nameVal).trim();
+            if (!rooms[currentRoom]) rooms[currentRoom] = [];
+            continue;
+          }
+
+          // Must have a numeric item number to count as a supply
+          const num = parseInt(numVal);
+          if (!isNaN(num) && currentRoom && nameVal) {
+            rooms[currentRoom].push({
+              name: String(nameVal).trim(),
+              unit: 'pcs',
+              min_qty: parseInt(minVal) || 1
+            });
+          }
+        }
+        resolve(rooms);
+      } catch(err) { reject(err); }
+    };
+    reader.onerror = reject;
+    reader.readAsBinaryString(file);
+  });
+}
+
+async function previewImport(input) {
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const rooms = await parseExcel(file);
+    _importData = rooms;
+    const roomNames = Object.keys(rooms);
+    const totalItems = roomNames.reduce((sum, r) => sum + rooms[r].length, 0);
+
+    let html = `<div style="margin-bottom:12px;font-size:14px;">Found <strong>${roomNames.length} rooms</strong> and <strong>${totalItems} items</strong>.</div>`;
+    html += roomNames.map(r => `
+      <div style="margin-bottom:10px;">
+        <div style="font-size:12px;font-weight:500;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;padding:4px 0;">${r} <span style="color:var(--text3);font-weight:400;">(${rooms[r].length} items)</span></div>
+        ${rooms[r].slice(0,3).map(s=>`<div style="font-size:13px;padding:3px 0;color:var(--text2);">· ${s.name} <span style="color:var(--text3);">min: ${s.min_qty}</span></div>`).join('')}
+        ${rooms[r].length > 3 ? `<div style="font-size:12px;color:var(--text3);">…and ${rooms[r].length-3} more</div>` : ''}
+      </div>`).join('');
+
+    document.getElementById('import-preview-content').innerHTML = html;
+    document.getElementById('import-preview').style.display = 'block';
+  } catch(e) {
+    toast('Error reading file. Make sure it is a valid .xlsx file.');
+    console.error(e);
+  }
+}
+
+function cancelImport() {
+  _importData = null;
+  document.getElementById('import-file').value = '';
+  document.getElementById('import-preview').style.display = 'none';
+}
+
+async function confirmImport() {
+  if (!_importData) return;
+  const btn = document.querySelector('#admin-import .btn-primary');
+  btn.textContent = 'Importing…'; btn.disabled = true;
+
+  try {
+    // Clear existing rooms and supplies (cascade deletes supplies)
+    await sb.from('supplies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    await sb.from('rooms').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+    const ICONS = ['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰'];
+    const roomNames = Object.keys(_importData);
+
+    for (let i = 0; i < roomNames.length; i++) {
+      const name = roomNames[i];
+      const icon = ICONS[i % ICONS.length];
+      const { data: roomData } = await sb.from('rooms').insert({ name, icon }).select().single();
+      if (!roomData) continue;
+      const items = _importData[name];
+      if (items.length > 0) {
+        const supplies = items.map(s => ({ room_id: roomData.id, name: s.name, unit: s.unit, min_qty: s.min_qty }));
+        await sb.from('supplies').insert(supplies);
+      }
+    }
+
+    _importData = null;
+    document.getElementById('import-file').value = '';
+    document.getElementById('import-preview').style.display = 'none';
+    await renderAdminAll();
+    renderRooms();
+    toast('Import successful! ' + roomNames.length + ' rooms loaded.');
+  } catch(e) {
+    toast('Import failed. Check connection and try again.');
+    console.error(e);
+  } finally {
+    btn.textContent = 'Import now'; btn.disabled = false;
+  }
+}
+
+function downloadTemplate() {
+  const data = [['Item No.', 'Item Name', 'Min Qty', 'Unit']];
+  cache.rooms.forEach(r => {
+    data.push(['', r.name, '', '']);
+    const items = cache.supplies.filter(s => s.room_id === r.id);
+    items.forEach((s, i) => data.push([i+1, s.name, s.min_qty, s.unit]));
+    data.push(['', '', '', '']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{wch:10},{wch:40},{wch:10},{wch:15}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
+  XLSX.writeFile(wb, 'LabStock_template.xlsx');
+}
+
+init();
 </script>
 </body>
 </html>
