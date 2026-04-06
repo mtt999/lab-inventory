@@ -554,15 +554,18 @@ function showResults(record) {
   window._rec = record;
 }
 
+// ── Sanitize Excel sheet names (max 31 chars, no : \ / ? * [ ]) ──
+function safeSheetName(name) {
+  return name.replace(/[:\\\/?*\[\]]/g, '-').substring(0, 31);
+}
+
 // ── EXPORT: single inspection ──
 function exportExcel() {
   const rec = window._rec; if (!rec) return;
-  const inspectedResults = rec.results || [];
+  const results = rec.results || [];
   const dateStr = new Date(rec.inspected_at).toLocaleString();
   const dateFile = new Date(rec.inspected_at).toLocaleDateString('en-CA');
-
-  const inspectedMap = {};
-  inspectedResults.forEach(r => { if (r.id) inspectedMap[r.id] = r; });
+  const low = results.filter(r => r.low);
 
   const data = [
     ['LabStock — Inspection Report'],
@@ -571,24 +574,21 @@ function exportExcel() {
     ['Room:', rec.room_name],
     []
   ];
-
-  const allLow = inspectedResults.filter(r => r.low);
-  if (allLow.length) {
+  if (low.length) {
     data.push(['⚠ ITEMS NEEDING RESTOCK']);
     data.push(['Item', 'Unit', 'Current Count', 'Minimum', 'Shortage']);
-    allLow.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty]));
+    low.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty]));
     data.push([]);
   }
-
   data.push(['FULL INVENTORY']);
   data.push(['Item', 'Unit', 'Count', 'Minimum', 'Status']);
-  inspectedResults.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'NEEDS RESTOCK' : 'OK']));
+  results.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'NEEDS RESTOCK' : 'OK']));
 
   const ws = XLSX.utils.aoa_to_sheet(data);
   ws['!cols'] = [{wch:40},{wch:10},{wch:12},{wch:12},{wch:16}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Inspection');
-  XLSX.writeFile(wb, `LabStock_${rec.room_name.replace(/\s+/g,'_')}_${dateFile}.xlsx`);
+  XLSX.writeFile(wb, `LabStock_${safeSheetName(rec.room_name)}_${dateFile}.xlsx`);
 }
 
 // ── EXPORT: all records — one sheet per inspection ──
@@ -608,7 +608,7 @@ async function exportAllRecords() {
 
     const wb = XLSX.utils.book_new();
 
-    // Add a Summary sheet first
+    // Summary sheet
     const summaryData = [
       ['LabStock — All Inspection Records'],
       ['Exported:', new Date().toLocaleString()],
@@ -619,34 +619,28 @@ async function exportAllRecords() {
     allRecs.forEach(rec => {
       const d = new Date(rec.inspected_at);
       const dateStr = d.toLocaleDateString('en-CA') + ' ' + d.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'});
-      summaryData.push([
-        dateStr,
-        rec.room_name,
-        rec.inspector,
-        (rec.results||[]).length,
-        rec.flag_count || 0,
-        rec.flag_count > 0 ? 'Has low items' : 'All OK'
-      ]);
+      summaryData.push([dateStr, rec.room_name, rec.inspector, (rec.results||[]).length, rec.flag_count||0, rec.flag_count > 0 ? 'Has low items' : 'All OK']);
     });
     const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
     summaryWs['!cols'] = [{wch:18},{wch:20},{wch:16},{wch:12},{wch:10},{wch:14}];
     XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
 
-    // One sheet per inspection
+    // One sheet per inspection — safe, unique names
     const sheetNames = new Set();
     allRecs.forEach(rec => {
       const d = new Date(rec.inspected_at);
       const dateStr = d.toLocaleDateString('en-CA');
       const timeStr = d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false}).replace(':','');
-
-      // Build a unique, safe sheet name (max 31 chars for Excel)
-      let sheetName = `${dateStr} ${rec.room_name}`.substring(0, 28);
-      // Handle duplicate sheet names by appending time
-      if (sheetNames.has(sheetName)) sheetName = `${dateStr} ${timeStr} ${rec.room_name}`.substring(0, 31);
-      sheetNames.add(sheetName);
-
       const results = rec.results || [];
       const low = results.filter(r => r.low);
+
+      let sheetName = safeSheetName(`${dateStr} ${rec.room_name}`);
+      if (sheetNames.has(sheetName)) sheetName = safeSheetName(`${dateStr} ${timeStr} ${rec.room_name}`);
+      // If still duplicate, append a counter
+      let finalName = sheetName;
+      let counter = 2;
+      while (sheetNames.has(finalName)) finalName = safeSheetName(sheetName.substring(0,28) + counter++);
+      sheetNames.add(finalName);
 
       const data = [
         ['LabStock — Inspection Report'],
@@ -657,21 +651,19 @@ async function exportAllRecords() {
         ['Low items:', rec.flag_count || 0],
         []
       ];
-
       if (low.length) {
         data.push(['⚠ ITEMS NEEDING RESTOCK']);
         data.push(['Item', 'Unit', 'Count', 'Minimum', 'Shortage']);
         low.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty]));
         data.push([]);
       }
-
       data.push(['ALL ITEMS']);
       data.push(['Item', 'Unit', 'Count', 'Minimum', 'Status']);
       results.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK']));
 
       const ws = XLSX.utils.aoa_to_sheet(data);
       ws['!cols'] = [{wch:40},{wch:10},{wch:10},{wch:10},{wch:10}];
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      XLSX.utils.book_append_sheet(wb, ws, finalName);
     });
 
     const today = new Date().toLocaleDateString('en-CA');
