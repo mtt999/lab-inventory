@@ -197,8 +197,9 @@
     <div id="screen-results" class="screen">
       <div class="section-header">
         <div class="section-title">Inspection complete</div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-sm" onclick="exportExcel()">Export Excel</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-sm" onclick="exportExcel()" title="Export this inspection">📄 This Inspection</button>
+          <button class="btn btn-sm" onclick="exportAllRecords()" title="Export all inspections — one sheet per date">📚 All Records</button>
           <button class="btn btn-sm btn-primary" onclick="showScreen('home')">Done</button>
         </div>
       </div>
@@ -359,7 +360,6 @@ async function tryLogin() {
     if (currentPin === (cache.settings['admin_pin'] || '1234')) startSession('admin','Admin');
     else { err.textContent = 'Incorrect admin PIN'; pinClear(); }
   } else {
-    // Use limit(1) instead of single() so duplicate PINs don't cause errors
     const { data } = await sb.from('users').select('*').eq('pin', currentPin).limit(1);
     if (data && data.length > 0) startSession('user', data[0].name);
     else { err.textContent = 'Incorrect PIN'; pinClear(); }
@@ -554,6 +554,7 @@ function showResults(record) {
   window._rec = record;
 }
 
+// ── EXPORT: single inspection ──
 function exportExcel() {
   const rec = window._rec; if (!rec) return;
   const inspectedResults = rec.results || [];
@@ -564,56 +565,124 @@ function exportExcel() {
   inspectedResults.forEach(r => { if (r.id) inspectedMap[r.id] = r; });
 
   const data = [
-    ['LabStock — Full Inspection Report'],
+    ['LabStock — Inspection Report'],
     ['Date:', dateStr],
     ['Inspector:', rec.inspector],
-    ['Inspected Room:', rec.room_name],
+    ['Room:', rec.room_name],
     []
   ];
 
   const allLow = inspectedResults.filter(r => r.low);
   if (allLow.length) {
     data.push(['⚠ ITEMS NEEDING RESTOCK']);
-    data.push(['Room', 'Item', 'Unit', 'Current Count', 'Minimum', 'Shortage', 'Purchase Links']);
-    allLow.forEach(r => {
-      const linkText = (r.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
-      data.push([rec.room_name, r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty, linkText]);
-    });
+    data.push(['Item', 'Unit', 'Current Count', 'Minimum', 'Shortage']);
+    allLow.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty]));
     data.push([]);
   }
 
   data.push(['FULL INVENTORY']);
-  cache.rooms.forEach(room => {
-    data.push([]);
-    data.push([room.name.toUpperCase()]);
-    data.push(['Item', 'Unit', 'Count', 'Minimum', 'Status', 'Purchase Links']);
-    const supplies = cache.supplies.filter(s => s.room_id === room.id);
-    if (!supplies.length) {
-      data.push(['(no items configured)', '', '', '', '']);
-    } else if (room.id === rec.room_id) {
-      supplies.forEach(s => {
-        const r = inspectedMap[s.id];
-        if (r) {
-          const lnk1 = (s.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
-          data.push([s.name, s.unit, r.qty, s.min_qty, r.low ? 'NEEDS RESTOCK' : 'OK', lnk1]);
-        } else {
-          const lnk2 = (s.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
-          data.push([s.name, s.unit, 'Not counted', s.min_qty, '—', lnk2]);
-        }
-      });
-    } else {
-      supplies.forEach(s => {
-        const lnk3 = (s.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
-        data.push([s.name, s.unit, '—', s.min_qty, 'Not inspected', lnk3]);
-      });
-    }
-  });
+  data.push(['Item', 'Unit', 'Count', 'Minimum', 'Status']);
+  inspectedResults.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'NEEDS RESTOCK' : 'OK']));
 
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{wch:28},{wch:14},{wch:12},{wch:12},{wch:16},{wch:40}];
+  ws['!cols'] = [{wch:40},{wch:10},{wch:12},{wch:12},{wch:16}];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Full Report');
-  XLSX.writeFile(wb, `LabStock_Report_${dateFile}.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, 'Inspection');
+  XLSX.writeFile(wb, `LabStock_${rec.room_name.replace(/\s+/g,'_')}_${dateFile}.xlsx`);
+}
+
+// ── EXPORT: all records — one sheet per inspection ──
+async function exportAllRecords() {
+  const btn = document.querySelector('#screen-results .btn-sm[onclick="exportAllRecords()"]');
+  if (btn) { btn.textContent = '⏳ Loading…'; btn.disabled = true; }
+
+  try {
+    const { data: allRecs, error } = await sb.from('inspections')
+      .select('*')
+      .order('inspected_at', { ascending: true });
+
+    if (error || !allRecs || !allRecs.length) {
+      toast('No inspection records found.');
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
+
+    // Add a Summary sheet first
+    const summaryData = [
+      ['LabStock — All Inspection Records'],
+      ['Exported:', new Date().toLocaleString()],
+      ['Total inspections:', allRecs.length],
+      [],
+      ['Date', 'Room', 'Inspector', 'Total Items', 'Low Items', 'Status']
+    ];
+    allRecs.forEach(rec => {
+      const d = new Date(rec.inspected_at);
+      const dateStr = d.toLocaleDateString('en-CA') + ' ' + d.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'});
+      summaryData.push([
+        dateStr,
+        rec.room_name,
+        rec.inspector,
+        (rec.results||[]).length,
+        rec.flag_count || 0,
+        rec.flag_count > 0 ? 'Has low items' : 'All OK'
+      ]);
+    });
+    const summaryWs = XLSX.utils.aoa_to_sheet(summaryData);
+    summaryWs['!cols'] = [{wch:18},{wch:20},{wch:16},{wch:12},{wch:10},{wch:14}];
+    XLSX.utils.book_append_sheet(wb, summaryWs, 'Summary');
+
+    // One sheet per inspection
+    const sheetNames = new Set();
+    allRecs.forEach(rec => {
+      const d = new Date(rec.inspected_at);
+      const dateStr = d.toLocaleDateString('en-CA');
+      const timeStr = d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12:false}).replace(':','');
+
+      // Build a unique, safe sheet name (max 31 chars for Excel)
+      let sheetName = `${dateStr} ${rec.room_name}`.substring(0, 28);
+      // Handle duplicate sheet names by appending time
+      if (sheetNames.has(sheetName)) sheetName = `${dateStr} ${timeStr} ${rec.room_name}`.substring(0, 31);
+      sheetNames.add(sheetName);
+
+      const results = rec.results || [];
+      const low = results.filter(r => r.low);
+
+      const data = [
+        ['LabStock — Inspection Report'],
+        ['Date:', d.toLocaleString()],
+        ['Room:', rec.room_name],
+        ['Inspector:', rec.inspector],
+        ['Total items:', results.length],
+        ['Low items:', rec.flag_count || 0],
+        []
+      ];
+
+      if (low.length) {
+        data.push(['⚠ ITEMS NEEDING RESTOCK']);
+        data.push(['Item', 'Unit', 'Count', 'Minimum', 'Shortage']);
+        low.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty]));
+        data.push([]);
+      }
+
+      data.push(['ALL ITEMS']);
+      data.push(['Item', 'Unit', 'Count', 'Minimum', 'Status']);
+      results.forEach(r => data.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK']));
+
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      ws['!cols'] = [{wch:40},{wch:10},{wch:10},{wch:10},{wch:10}];
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    });
+
+    const today = new Date().toLocaleDateString('en-CA');
+    XLSX.writeFile(wb, `LabStock_AllRecords_${today}.xlsx`);
+    toast(`Exported ${allRecs.length} inspections successfully!`);
+  } catch(e) {
+    toast('Export failed. Check connection.');
+    console.error(e);
+  } finally {
+    if (btn) { btn.textContent = '📚 All Records'; btn.disabled = false; }
+  }
 }
 
 async function renderHistory() {
@@ -840,7 +909,7 @@ function selectIcon(btn, icon) {
 
 async function saveRoom() {
   const name = document.getElementById('m-room-name').value.trim();
-  if (!name) { toast('Please enter a room name.'); return; }\
+  if (!name) { toast('Please enter a room name.'); return; }
   if (window._editRoomId) await sb.from('rooms').update({name,icon:window._selIcon}).eq('id',window._editRoomId);
   else await sb.from('rooms').insert({name,icon:window._selIcon});
   closeModal(); await renderAdminAll(); renderRooms(); toast('Room saved.');
