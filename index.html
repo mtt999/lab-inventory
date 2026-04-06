@@ -359,8 +359,9 @@ async function tryLogin() {
     if (currentPin === (cache.settings['admin_pin'] || '1234')) startSession('admin','Admin');
     else { err.textContent = 'Incorrect admin PIN'; pinClear(); }
   } else {
-    const { data } = await sb.from('users').select('*').eq('pin', currentPin).single();
-    if (data) startSession('user', data.name);
+    // Use limit(1) instead of single() so duplicate PINs don't cause errors
+    const { data } = await sb.from('users').select('*').eq('pin', currentPin).limit(1);
+    if (data && data.length > 0) startSession('user', data[0].name);
     else { err.textContent = 'Incorrect PIN'; pinClear(); }
   }
 }
@@ -839,7 +840,7 @@ function selectIcon(btn, icon) {
 
 async function saveRoom() {
   const name = document.getElementById('m-room-name').value.trim();
-  if (!name) { toast('Please enter a room name.'); return; }
+  if (!name) { toast('Please enter a room name.'); return; }\
   if (window._editRoomId) await sb.from('rooms').update({name,icon:window._selIcon}).eq('id',window._editRoomId);
   else await sb.from('rooms').insert({name,icon:window._selIcon});
   closeModal(); await renderAdminAll(); renderRooms(); toast('Room saved.');
@@ -1103,14 +1104,10 @@ async function confirmImport() {
   btn.textContent = 'Importing…'; btn.disabled = true;
 
   try {
-    // Delete all supplies first (no FK issues)
     await sb.from('supplies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-
-    // Delete rooms one by one — skip any tied to inspection history (FK constraint)
     const { data: existingRooms } = await sb.from('rooms').select('id');
     for (const room of (existingRooms || [])) {
       await sb.from('rooms').delete().eq('id', room.id);
-      // If it fails due to FK with inspections, that's ok — those rooms are orphaned
     }
 
     const ICONS = ['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰'];
@@ -1163,7 +1160,6 @@ function downloadTemplate() {
   XLSX.writeFile(wb, 'LabStock_template.xlsx');
 }
 
-// ── ROOM PHOTO UPLOAD ──
 function uploadRoomPhoto(roomId, roomName) {
   openModal(`
     <div style="font-weight:600;font-size:16px;margin-bottom:8px;">Upload room photo</div>
@@ -1226,7 +1222,6 @@ async function saveRoomPhoto(roomId) {
   }
 }
 
-// ── PHOTO UPLOAD ──
 function uploadPhotoById(btn) {
   const id = btn.getAttribute('data-sid');
   const s = cache.supplies.find(s => s.id === id);
