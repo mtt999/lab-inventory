@@ -268,7 +268,7 @@
           <div class="card-title">Import from Excel</div>
           <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">Upload your Excel file to automatically populate rooms and supplies. This will <strong>replace all existing rooms and supplies</strong> — inspection history is kept.</p>
           <div style="background:var(--surface2);border-radius:var(--radius);padding:16px;margin-bottom:16px;font-size:13px;color:var(--text2);">
-            <strong>Expected format:</strong> Column A = item number, Column B = item name. Room names appear as header rows (no number in column A). A third column (Min Qty) is optional.
+            <strong>Expected format:</strong> Column A = item number, Column B = item name. Room names appear as header rows (no number in column A). A third column (Min Qty) is optional. If no room headers exist, all items are placed in "Janitor Room".
           </div>
           <div class="field">
             <label>Select Excel file (.xlsx)</label>
@@ -992,9 +992,10 @@ async function deleteUser(id) {
   renderAdminUsers(); toast('User deleted.');
 }
 
-
-// ── KNOWN ROOM KEYWORDS — rows with these words and no item number = room headers ──
+// ── KNOWN ROOM KEYWORDS ──
 const ROOM_KEYWORDS = ['room','lab','highbay','high bay','bay','shed','office','tool','storage','corridor','hall','area'];
+// ── DEFAULT ROOM NAME for flat lists with no room header ──
+const DEFAULT_ROOM_NAME = 'Janitor Room';
 
 let _importData = null;
 
@@ -1003,7 +1004,7 @@ function isRoomHeader(numVal, nameVal) {
   if (!nameVal || typeof nameVal !== 'string') return false;
   const n = nameVal.trim().toLowerCase();
   if (!n) return false;
-  const skipWords = ['item','no.','safety box','safety items','front cabinet','air tanks','mixing station','autoextractor','auto extractor','storage area'];
+  const skipWords = ['item','no.','item name','min qty','min qTY','safety box','safety items','front cabinet','air tanks','mixing station','autoextractor','auto extractor','storage area'];
   if (skipWords.some(w => n === w || n.startsWith(w))) return false;
   const hasKeyword = ROOM_KEYWORDS.some(k => n.includes(k));
   const isAllCaps = nameVal.trim() === nameVal.trim().toUpperCase() && nameVal.trim().split(/\s+/).length >= 2;
@@ -1024,10 +1025,16 @@ function parseExcel(file) {
         for (const row of rows) {
           const numVal = row[0];
           const nameVal = row[1];
-          const minVal = row[2]; // Min Qty column
-          const qtyVal = row[3]; // Optional current qty column D
+          const minVal = row[2];
+          const qtyVal = row[3];
 
           if (!nameVal || String(nameVal).trim() === '') continue;
+
+          // Skip pure header rows (e.g. "No. / item name / Min QTY")
+          const nameStr = String(nameVal).trim().toLowerCase();
+          if (nameStr === 'item name' || nameStr === 'item') continue;
+          const numStr = String(numVal || '').trim().toLowerCase();
+          if (numStr === 'no.' || numStr === 'no' || numStr === '#') continue;
 
           if (isRoomHeader(numVal, nameVal)) {
             currentRoom = String(nameVal).trim();
@@ -1036,9 +1043,13 @@ function parseExcel(file) {
           }
 
           const num = parseInt(numVal);
-          if (!isNaN(num) && currentRoom && nameVal) {
+          if (!isNaN(num) && nameVal) {
+            // If no room header was ever found, use the default room name
+            if (!currentRoom) {
+              currentRoom = DEFAULT_ROOM_NAME;
+              if (!rooms[currentRoom]) rooms[currentRoom] = [];
+            }
             const min_qty = parseInt(minVal) || 1;
-            // If column D has a qty value use it, otherwise default to min_qty
             const qty = (qtyVal !== null && qtyVal !== undefined && !isNaN(parseInt(qtyVal)))
               ? parseInt(qtyVal)
               : min_qty;
@@ -1067,7 +1078,7 @@ async function previewImport(input) {
     const roomNames = Object.keys(rooms);
     const totalItems = roomNames.reduce((sum, r) => sum + rooms[r].length, 0);
 
-    let html = `<div style="margin-bottom:12px;font-size:14px;">Found <strong>${roomNames.length} rooms</strong> and <strong>${totalItems} items</strong>.</div>`;
+    let html = `<div style="margin-bottom:12px;font-size:14px;">Found <strong>${roomNames.length} room${roomNames.length!==1?'s':''}</strong> and <strong>${totalItems} items</strong>.</div>`;
     html += roomNames.map(r => `
       <div style="margin-bottom:10px;">
         <div style="font-size:12px;font-weight:500;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;padding:4px 0;">${r} <span style="color:var(--text3);font-weight:400;">(${rooms[r].length} items)</span></div>
@@ -1095,7 +1106,6 @@ async function confirmImport() {
   btn.textContent = 'Importing…'; btn.disabled = true;
 
   try {
-    // Clear existing rooms and supplies
     await sb.from('supplies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await sb.from('rooms').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
@@ -1109,7 +1119,6 @@ async function confirmImport() {
       if (!roomData) continue;
       const items = _importData[name];
       if (items.length > 0) {
-        // ✅ FIX: include qty in the insert so supplies don't show as 0
         const supplies = items.map(s => ({
           room_id: roomData.id,
           name: s.name,
@@ -1126,7 +1135,7 @@ async function confirmImport() {
     document.getElementById('import-preview').style.display = 'none';
     await renderAdminAll();
     renderRooms();
-    toast('Import successful! ' + roomNames.length + ' rooms loaded.');
+    toast('Import successful! ' + roomNames.length + ' room' + (roomNames.length!==1?'s':'') + ' loaded.');
   } catch(e) {
     toast('Import failed. Check connection and try again.');
     console.error(e);
@@ -1185,7 +1194,6 @@ function uploadRoomPhoto(roomId, roomName) {
   }
 
   document.getElementById('room-photo-input').addEventListener('change', function() { handleRoomFile(this.files[0]); });
-
   const dz = document.getElementById('room-drop-zone');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor='var(--accent)'; dz.style.background='var(--accent-light)'; });
   dz.addEventListener('dragleave', () => { dz.style.borderColor='var(--border)'; dz.style.background=''; });
@@ -1206,17 +1214,13 @@ async function saveRoomPhoto(roomId) {
     await sb.from('rooms').update({ photo_url }).eq('id', roomId);
     const r = cache.rooms.find(r => r.id === roomId);
     if (r) r.photo_url = photo_url;
-    closeModal();
-    renderAdminRooms();
-    renderRooms();
-    toast('Room photo saved!');
+    closeModal(); renderAdminRooms(); renderRooms(); toast('Room photo saved!');
   } catch(e) {
     toast('Upload failed. Check your Supabase storage bucket.');
     console.error(e);
     btn.textContent = 'Save photo'; btn.disabled = false;
   }
 }
-
 
 // ── PHOTO UPLOAD ──
 function uploadPhotoById(btn) {
@@ -1277,7 +1281,6 @@ function uploadPhoto(supplyId, supplyName) {
   }
 
   document.getElementById('photo-input').addEventListener('change', function() { handleSupplyFile(this.files[0]); });
-
   const dz = document.getElementById('supply-drop-zone');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.style.borderColor='var(--accent)'; dz.style.background='var(--accent-light)'; });
   dz.addEventListener('dragleave', () => { dz.style.borderColor='var(--border)'; dz.style.background=''; });
@@ -1298,16 +1301,13 @@ async function savePhoto(supplyId) {
     await sb.from('supplies').update({ photo_url }).eq('id', supplyId);
     const s = cache.supplies.find(s => s.id === supplyId);
     if (s) s.photo_url = photo_url;
-    closeModal();
-    renderAdminSupplies();
-    toast('Photo saved!');
+    closeModal(); renderAdminSupplies(); toast('Photo saved!');
   } catch(e) {
     toast('Upload failed. Check your Supabase storage bucket.');
     console.error(e);
     btn.textContent = 'Save photo'; btn.disabled = false;
   }
 }
-
 
 init();
 </script>
