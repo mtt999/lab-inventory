@@ -443,7 +443,6 @@ function renderInspectionStep() {
     ? `<img src="${item.photo_url}" alt="${item.name}" style="width:120px;height:120px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:16px;" />`
     : `<div style="width:120px;height:120px;border-radius:var(--radius);border:1px dashed var(--border);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;color:var(--text3);font-size:12px;">No photo</div>`;
 
-  // Build links html
   const links = item.links || [];
   const linksHtml = links.length
     ? links.map(l=>`<a href="${l.url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border:1px solid var(--accent);border-radius:var(--radius);color:var(--accent);font-size:13px;font-weight:500;text-decoration:none;background:var(--accent-light);">🛒 ${l.label||'Buy now'}</a>`).join('')
@@ -560,11 +559,9 @@ function exportExcel() {
   const dateStr = new Date(rec.inspected_at).toLocaleString();
   const dateFile = new Date(rec.inspected_at).toLocaleDateString('en-CA');
 
-  // Build a map of inspected items by supply id for quick lookup
   const inspectedMap = {};
   inspectedResults.forEach(r => { if (r.id) inspectedMap[r.id] = r; });
 
-  // Header
   const data = [
     ['LabStock — Full Inspection Report'],
     ['Date:', dateStr],
@@ -573,7 +570,6 @@ function exportExcel() {
     []
   ];
 
-  // All low items summary at top
   const allLow = inspectedResults.filter(r => r.low);
   if (allLow.length) {
     data.push(['⚠ ITEMS NEEDING RESTOCK']);
@@ -585,7 +581,6 @@ function exportExcel() {
     data.push([]);
   }
 
-  // Full room-by-room breakdown
   data.push(['FULL INVENTORY']);
   cache.rooms.forEach(room => {
     data.push([]);
@@ -595,7 +590,6 @@ function exportExcel() {
     if (!supplies.length) {
       data.push(['(no items configured)', '', '', '', '']);
     } else if (room.id === rec.room_id) {
-      // This is the inspected room — show actual counts
       supplies.forEach(s => {
         const r = inspectedMap[s.id];
         if (r) {
@@ -607,7 +601,6 @@ function exportExcel() {
         }
       });
     } else {
-      // Not inspected this run — show items with blank counts
       supplies.forEach(s => {
         const lnk3 = (s.links||[]).map(l=>`${l.label}: ${l.url}`).join(' | ');
         data.push([s.name, s.unit, '—', s.min_qty, 'Not inspected', lnk3]);
@@ -628,7 +621,6 @@ async function renderHistory() {
   const { data } = await sb.from('inspections').select('*').order('inspected_at',{ascending:false}).limit(200);
   if (!data||!data.length) { el.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div>No inspections yet.</div>'; return; }
 
-  // Group by month
   const months = {};
   data.forEach(rec => {
     const d = new Date(rec.inspected_at);
@@ -723,7 +715,7 @@ function renderAdminRooms() {
           <div><div style="font-weight:600;">${r.name}</div><div class="text-muted">${cnt} supplies</div></div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button class="btn btn-sm" onclick="uploadRoomPhoto('${r.id}','${r.name.replace(/'/g,"\''")}')">Photo</button>
+          <button class="btn btn-sm" onclick="uploadRoomPhoto('${r.id}','${r.name.replace(/'/g,"\\'")}')">Photo</button>
           <button class="btn btn-sm" onclick="editRoom('${r.id}')">Edit</button>
           <button class="btn btn-sm" style="color:var(--accent2);border-color:var(--accent2);" onclick="deleteRoom('${r.id}')">Delete</button>
         </div>
@@ -904,7 +896,6 @@ function addLinkRow() {
 function removeLink(i) {
   const list = document.getElementById('m-links-list');
   if (list.children[i]) list.children[i].remove();
-  // Re-index remaining
   Array.from(list.children).forEach((div, idx) => {
     const inputs = div.querySelectorAll('input');
     if (inputs[0]) inputs[0].id = `m-link-label-${idx}`;
@@ -1012,10 +1003,8 @@ function isRoomHeader(numVal, nameVal) {
   if (!nameVal || typeof nameVal !== 'string') return false;
   const n = nameVal.trim().toLowerCase();
   if (!n) return false;
-  // Skip sub-category rows: rows with no number that are short labels or contain certain keywords
   const skipWords = ['item','no.','safety box','safety items','front cabinet','air tanks','mixing station','autoextractor','auto extractor','storage area'];
   if (skipWords.some(w => n === w || n.startsWith(w))) return false;
-  // It's a room if it contains a room keyword OR is ALL CAPS with 3+ words
   const hasKeyword = ROOM_KEYWORDS.some(k => n.includes(k));
   const isAllCaps = nameVal.trim() === nameVal.trim().toUpperCase() && nameVal.trim().split(/\s+/).length >= 2;
   return hasKeyword || isAllCaps;
@@ -1035,7 +1024,8 @@ function parseExcel(file) {
         for (const row of rows) {
           const numVal = row[0];
           const nameVal = row[1];
-          const minVal = row[2]; // optional Min Qty column
+          const minVal = row[2]; // Min Qty column
+          const qtyVal = row[3]; // Optional current qty column D
 
           if (!nameVal || String(nameVal).trim() === '') continue;
 
@@ -1045,13 +1035,18 @@ function parseExcel(file) {
             continue;
           }
 
-          // Must have a numeric item number to count as a supply
           const num = parseInt(numVal);
           if (!isNaN(num) && currentRoom && nameVal) {
+            const min_qty = parseInt(minVal) || 1;
+            // If column D has a qty value use it, otherwise default to min_qty
+            const qty = (qtyVal !== null && qtyVal !== undefined && !isNaN(parseInt(qtyVal)))
+              ? parseInt(qtyVal)
+              : min_qty;
             rooms[currentRoom].push({
               name: String(nameVal).trim(),
               unit: 'pcs',
-              min_qty: parseInt(minVal) || 1
+              min_qty: min_qty,
+              qty: qty
             });
           }
         }
@@ -1076,7 +1071,7 @@ async function previewImport(input) {
     html += roomNames.map(r => `
       <div style="margin-bottom:10px;">
         <div style="font-size:12px;font-weight:500;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;padding:4px 0;">${r} <span style="color:var(--text3);font-weight:400;">(${rooms[r].length} items)</span></div>
-        ${rooms[r].slice(0,3).map(s=>`<div style="font-size:13px;padding:3px 0;color:var(--text2);">· ${s.name} <span style="color:var(--text3);">min: ${s.min_qty}</span></div>`).join('')}
+        ${rooms[r].slice(0,3).map(s=>`<div style="font-size:13px;padding:3px 0;color:var(--text2);">· ${s.name} <span style="color:var(--text3);">min: ${s.min_qty} · qty: ${s.qty}</span></div>`).join('')}
         ${rooms[r].length > 3 ? `<div style="font-size:12px;color:var(--text3);">…and ${rooms[r].length-3} more</div>` : ''}
       </div>`).join('');
 
@@ -1100,7 +1095,7 @@ async function confirmImport() {
   btn.textContent = 'Importing…'; btn.disabled = true;
 
   try {
-    // Clear existing rooms and supplies (cascade deletes supplies)
+    // Clear existing rooms and supplies
     await sb.from('supplies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
     await sb.from('rooms').delete().neq('id', '00000000-0000-0000-0000-000000000000');
 
@@ -1114,7 +1109,14 @@ async function confirmImport() {
       if (!roomData) continue;
       const items = _importData[name];
       if (items.length > 0) {
-        const supplies = items.map(s => ({ room_id: roomData.id, name: s.name, unit: s.unit, min_qty: s.min_qty }));
+        // ✅ FIX: include qty in the insert so supplies don't show as 0
+        const supplies = items.map(s => ({
+          room_id: roomData.id,
+          name: s.name,
+          unit: s.unit,
+          min_qty: s.min_qty,
+          qty: s.qty
+        }));
         await sb.from('supplies').insert(supplies);
       }
     }
@@ -1294,7 +1296,6 @@ async function savePhoto(supplyId) {
     const { data: urlData } = sb.storage.from('item-photos').getPublicUrl(filename);
     const photo_url = urlData.publicUrl;
     await sb.from('supplies').update({ photo_url }).eq('id', supplyId);
-    // Update cache
     const s = cache.supplies.find(s => s.id === supplyId);
     if (s) s.photo_url = photo_url;
     closeModal();
