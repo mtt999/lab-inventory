@@ -994,7 +994,6 @@ async function deleteUser(id) {
 
 // ── KNOWN ROOM KEYWORDS ──
 const ROOM_KEYWORDS = ['room','lab','highbay','high bay','bay','shed','office','tool','storage','corridor','hall','area'];
-// ── DEFAULT ROOM NAME for flat lists with no room header ──
 const DEFAULT_ROOM_NAME = 'Janitor Room';
 
 let _importData = null;
@@ -1004,7 +1003,7 @@ function isRoomHeader(numVal, nameVal) {
   if (!nameVal || typeof nameVal !== 'string') return false;
   const n = nameVal.trim().toLowerCase();
   if (!n) return false;
-  const skipWords = ['item','no.','item name','min qty','min qTY','safety box','safety items','front cabinet','air tanks','mixing station','autoextractor','auto extractor','storage area'];
+  const skipWords = ['item','no.','item name','min qty','safety box','safety items','front cabinet','air tanks','mixing station','autoextractor','auto extractor','storage area'];
   if (skipWords.some(w => n === w || n.startsWith(w))) return false;
   const hasKeyword = ROOM_KEYWORDS.some(k => n.includes(k));
   const isAllCaps = nameVal.trim() === nameVal.trim().toUpperCase() && nameVal.trim().split(/\s+/).length >= 2;
@@ -1030,7 +1029,6 @@ function parseExcel(file) {
 
           if (!nameVal || String(nameVal).trim() === '') continue;
 
-          // Skip pure header rows (e.g. "No. / item name / Min QTY")
           const nameStr = String(nameVal).trim().toLowerCase();
           if (nameStr === 'item name' || nameStr === 'item') continue;
           const numStr = String(numVal || '').trim().toLowerCase();
@@ -1044,7 +1042,6 @@ function parseExcel(file) {
 
           const num = parseInt(numVal);
           if (!isNaN(num) && nameVal) {
-            // If no room header was ever found, use the default room name
             if (!currentRoom) {
               currentRoom = DEFAULT_ROOM_NAME;
               if (!rooms[currentRoom]) rooms[currentRoom] = [];
@@ -1106,8 +1103,15 @@ async function confirmImport() {
   btn.textContent = 'Importing…'; btn.disabled = true;
 
   try {
+    // Delete all supplies first (no FK issues)
     await sb.from('supplies').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-    await sb.from('rooms').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+
+    // Delete rooms one by one — skip any tied to inspection history (FK constraint)
+    const { data: existingRooms } = await sb.from('rooms').select('id');
+    for (const room of (existingRooms || [])) {
+      await sb.from('rooms').delete().eq('id', room.id);
+      // If it fails due to FK with inspections, that's ok — those rooms are orphaned
+    }
 
     const ICONS = ['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰'];
     const roomNames = Object.keys(_importData);
@@ -1115,8 +1119,8 @@ async function confirmImport() {
     for (let i = 0; i < roomNames.length; i++) {
       const name = roomNames[i];
       const icon = ICONS[i % ICONS.length];
-      const { data: roomData } = await sb.from('rooms').insert({ name, icon }).select().single();
-      if (!roomData) continue;
+      const { data: roomData, error: roomErr } = await sb.from('rooms').insert({ name, icon }).select().single();
+      if (roomErr || !roomData) continue;
       const items = _importData[name];
       if (items.length > 0) {
         const supplies = items.map(s => ({
