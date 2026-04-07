@@ -224,7 +224,7 @@
       <div id="admin-import" class="admin-section">
         <div class="card">
           <div class="card-title">Import from Excel</div>
-          <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">Upload your Excel file to automatically populate rooms and supplies. This will <strong>replace all existing rooms and supplies</strong> — inspection history is kept.</p>
+          <p style="font-size:14px;color:var(--text2);margin-bottom:16px;">Upload an Excel file to add rooms and supplies. Existing rooms and supplies are <strong>kept</strong> — new items are added, and existing items with the same name have their minimum quantity updated.</p>
           <div style="background:var(--surface2);border-radius:var(--radius);padding:16px;margin-bottom:16px;font-size:13px;color:var(--text2);"><strong>Expected format:</strong> Column A = item number, Column B = item name. Room names appear as header rows (no number in column A). A third column (Min Qty) is optional. If no room headers exist, all items are placed in "Janitor Room".</div>
           <div class="field"><label>Select Excel file (.xlsx)</label><input type="file" id="import-file" accept=".xlsx" onchange="previewImport(this)" style="padding:8px;" /></div>
           <div id="import-preview" style="display:none;">
@@ -435,36 +435,25 @@ function showResults(record){
   window._rec=record;
 }
 
-// ── Sanitize Excel sheet names (max 31 chars, no : \ / ? * [ ]) ──
 function safeSheetName(name){return name.replace(/[:\\\/?*\[\]]/g,'-').substring(0,31);}
-
-// ── Format links array for Excel cell ──
 function fmtLinks(links){return(links||[]).map(l=>`${l.label||'Link'}: ${l.url}`).join(' | ');}
 
-// ── EXPORT: single inspection — with Notes + Purchase Links ──
 function exportExcel(){
   const rec=window._rec; if(!rec)return;
   const results=rec.results||[];
   const dateStr=new Date(rec.inspected_at).toLocaleString();
   const dateFile=new Date(rec.inspected_at).toLocaleDateString('en-CA');
   const low=results.filter(r=>r.low);
-
-  const data=[
-    ['LabStock — Inspection Report'],
-    ['Date:',dateStr],['Inspector:',rec.inspector],['Room:',rec.room_name],[]
-  ];
-
+  const data=[['LabStock — Inspection Report'],['Date:',dateStr],['Inspector:',rec.inspector],['Room:',rec.room_name],[]];
   if(low.length){
     data.push(['⚠ ITEMS NEEDING RESTOCK']);
     data.push(['Item','Unit','Current Count','Minimum','Shortage','Notes','Purchase Links']);
     low.forEach(r=>data.push([r.name,r.unit,r.qty,r.min_qty,r.min_qty-r.qty,r.notes||'',fmtLinks(r.links)]));
     data.push([]);
   }
-
   data.push(['FULL INVENTORY']);
   data.push(['Item','Unit','Count','Minimum','Status','Notes','Purchase Links']);
   results.forEach(r=>data.push([r.name,r.unit,r.qty,r.min_qty,r.low?'NEEDS RESTOCK':'OK',r.notes||'',fmtLinks(r.links)]));
-
   const ws=XLSX.utils.aoa_to_sheet(data);
   ws['!cols']=[{wch:36},{wch:8},{wch:10},{wch:10},{wch:14},{wch:30},{wch:50}];
   const wb=XLSX.utils.book_new();
@@ -472,24 +461,14 @@ function exportExcel(){
   XLSX.writeFile(wb,`LabStock_${safeSheetName(rec.room_name)}_${dateFile}.xlsx`);
 }
 
-// ── EXPORT: all records — one sheet per inspection, with Notes + Purchase Links ──
 async function exportAllRecords(){
   const btn=document.querySelector('#screen-results .btn-sm[onclick="exportAllRecords()"]');
   if(btn){btn.textContent='⏳ Loading…';btn.disabled=true;}
   try {
     const{data:allRecs,error}=await sb.from('inspections').select('*').order('inspected_at',{ascending:true});
     if(error||!allRecs||!allRecs.length){toast('No inspection records found.');return;}
-
     const wb=XLSX.utils.book_new();
-
-    // Summary sheet
-    const summaryData=[
-      ['LabStock — All Inspection Records'],
-      ['Exported:',new Date().toLocaleString()],
-      ['Total inspections:',allRecs.length],
-      [],
-      ['Date','Room','Inspector','Total Items','Low Items','Status']
-    ];
+    const summaryData=[['LabStock — All Inspection Records'],['Exported:',new Date().toLocaleString()],['Total inspections:',allRecs.length],[],['Date','Room','Inspector','Total Items','Low Items','Status']];
     allRecs.forEach(rec=>{
       const d=new Date(rec.inspected_at);
       const ds=d.toLocaleDateString('en-CA')+' '+d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
@@ -498,8 +477,6 @@ async function exportAllRecords(){
     const summaryWs=XLSX.utils.aoa_to_sheet(summaryData);
     summaryWs['!cols']=[{wch:18},{wch:20},{wch:16},{wch:12},{wch:10},{wch:14}];
     XLSX.utils.book_append_sheet(wb,summaryWs,'Summary');
-
-    // One sheet per inspection — safe unique names, with Notes + Purchase Links
     const sheetNames=new Set();
     allRecs.forEach(rec=>{
       const d=new Date(rec.inspected_at);
@@ -507,35 +484,25 @@ async function exportAllRecords(){
       const timeStr=d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:false}).replace(':','');
       const results=rec.results||[];
       const low=results.filter(r=>r.low);
-
       let sheetName=safeSheetName(`${dateStr} ${rec.room_name}`);
       if(sheetNames.has(sheetName))sheetName=safeSheetName(`${dateStr} ${timeStr} ${rec.room_name}`);
       let finalName=sheetName,counter=2;
       while(sheetNames.has(finalName))finalName=safeSheetName(sheetName.substring(0,28)+counter++);
       sheetNames.add(finalName);
-
-      const data=[
-        ['LabStock — Inspection Report'],
-        ['Date:',d.toLocaleString()],['Room:',rec.room_name],['Inspector:',rec.inspector],
-        ['Total items:',results.length],['Low items:',rec.flag_count||0],[]
-      ];
-
+      const data=[['LabStock — Inspection Report'],['Date:',d.toLocaleString()],['Room:',rec.room_name],['Inspector:',rec.inspector],['Total items:',results.length],['Low items:',rec.flag_count||0],[]];
       if(low.length){
         data.push(['⚠ ITEMS NEEDING RESTOCK']);
         data.push(['Item','Unit','Count','Minimum','Shortage','Notes','Purchase Links']);
         low.forEach(r=>data.push([r.name,r.unit,r.qty,r.min_qty,r.min_qty-r.qty,r.notes||'',fmtLinks(r.links)]));
         data.push([]);
       }
-
       data.push(['ALL ITEMS']);
       data.push(['Item','Unit','Count','Minimum','Status','Notes','Purchase Links']);
       results.forEach(r=>data.push([r.name,r.unit,r.qty,r.min_qty,r.low?'LOW':'OK',r.notes||'',fmtLinks(r.links)]));
-
       const ws=XLSX.utils.aoa_to_sheet(data);
       ws['!cols']=[{wch:36},{wch:8},{wch:10},{wch:10},{wch:10},{wch:30},{wch:50}];
       XLSX.utils.book_append_sheet(wb,ws,finalName);
     });
-
     const today=new Date().toLocaleDateString('en-CA');
     XLSX.writeFile(wb,`LabStock_AllRecords_${today}.xlsx`);
     toast(`Exported ${allRecs.length} inspections successfully!`);
@@ -627,9 +594,7 @@ async function renderAdminUsers(){
 }
 
 function renderAdminSettings(){const sel=document.getElementById('due-day-select');if(sel)sel.value=cache.settings['due_day']||'5';}
-
 async function saveDueDay(){const val=document.getElementById('due-day-select').value;await sb.from('settings').upsert({key:'due_day',value:val});cache.settings['due_day']=val;toast('Reminder day saved.');}
-
 async function changeAdminPin(){
   const val=document.getElementById('new-admin-pin').value;
   if(!/^\d{4}$/.test(val)){toast('PIN must be exactly 4 digits.');return;}
@@ -795,7 +760,7 @@ async function previewImport(input){
   try{
     const rooms=await parseExcel(file);_importData=rooms;
     const roomNames=Object.keys(rooms),totalItems=roomNames.reduce((sum,r)=>sum+rooms[r].length,0);
-    let html=`<div style="margin-bottom:12px;font-size:14px;">Found <strong>${roomNames.length} room${roomNames.length!==1?'s':''}</strong> and <strong>${totalItems} items</strong>.</div>`;
+    let html=`<div style="margin-bottom:12px;font-size:14px;">Found <strong>${roomNames.length} room${roomNames.length!==1?'s':''}</strong> and <strong>${totalItems} items</strong>. Existing rooms and supplies will be kept.</div>`;
     html+=roomNames.map(r=>`<div style="margin-bottom:10px;"><div style="font-size:12px;font-weight:500;color:var(--text3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.06em;padding:4px 0;">${r} <span style="color:var(--text3);font-weight:400;">(${rooms[r].length} items)</span></div>${rooms[r].slice(0,3).map(s=>`<div style="font-size:13px;padding:3px 0;color:var(--text2);">· ${s.name} <span style="color:var(--text3);">min: ${s.min_qty} · qty: ${s.qty}</span></div>`).join('')}${rooms[r].length>3?`<div style="font-size:12px;color:var(--text3);">…and ${rooms[r].length-3} more</div>`:''}</div>`).join('');
     document.getElementById('import-preview-content').innerHTML=html;
     document.getElementById('import-preview').style.display='block';
@@ -808,19 +773,57 @@ async function confirmImport(){
   if(!_importData)return;
   const btn=document.querySelector('#admin-import .btn-primary');btn.textContent='Importing…';btn.disabled=true;
   try{
-    await sb.from('supplies').delete().neq('id','00000000-0000-0000-0000-000000000000');
-    const{data:existingRooms}=await sb.from('rooms').select('id');
-    for(const room of(existingRooms||[]))await sb.from('rooms').delete().eq('id',room.id);
-    const ICONS=['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰'],roomNames=Object.keys(_importData);
+    // ── MERGE LOGIC: preserve existing rooms and supplies ──
+    // Fetch current state fresh
+    const{data:existingRooms}=await sb.from('rooms').select('*');
+    const{data:existingSupplies}=await sb.from('supplies').select('*');
+
+    // Build lookup maps (case-insensitive by name)
+    const roomByName={};
+    (existingRooms||[]).forEach(r=>roomByName[r.name.toLowerCase()]=r);
+    const supplyKey=(roomId,name)=>roomId+'::'+name.toLowerCase();
+    const supplyByKey={};
+    (existingSupplies||[]).forEach(s=>supplyByKey[supplyKey(s.room_id,s.name)]=s);
+
+    const ICONS=['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰'];
+    const roomNames=Object.keys(_importData);
+    let added=0,updated=0;
+
     for(let i=0;i<roomNames.length;i++){
-      const name=roomNames[i],icon=ICONS[i%ICONS.length];
-      const{data:roomData,error:roomErr}=await sb.from('rooms').insert({name,icon}).select().single();
-      if(roomErr||!roomData)continue;
+      const name=roomNames[i];
+      let roomId;
+
+      // Reuse existing room if name matches, otherwise create new
+      const existingRoom=roomByName[name.toLowerCase()];
+      if(existingRoom){
+        roomId=existingRoom.id;
+      } else {
+        const icon=ICONS[i%ICONS.length];
+        const{data:newRoom,error:roomErr}=await sb.from('rooms').insert({name,icon}).select().single();
+        if(roomErr||!newRoom)continue;
+        roomId=newRoom.id;
+      }
+
+      // For each item: update if exists (same name in same room), insert if new
       const items=_importData[name];
-      if(items.length>0)await sb.from('supplies').insert(items.map(s=>({room_id:roomData.id,name:s.name,unit:s.unit,min_qty:s.min_qty,qty:s.qty})));
+      for(const s of items){
+        const key=supplyKey(roomId,s.name);
+        if(supplyByKey[key]){
+          // Update min_qty only — preserve notes, links, photos
+          await sb.from('supplies').update({min_qty:s.min_qty,qty:s.qty}).eq('id',supplyByKey[key].id);
+          updated++;
+        } else {
+          await sb.from('supplies').insert({room_id:roomId,name:s.name,unit:s.unit,min_qty:s.min_qty,qty:s.qty});
+          added++;
+        }
+      }
     }
-    _importData=null;document.getElementById('import-file').value='';document.getElementById('import-preview').style.display='none';
-    await renderAdminAll();renderRooms();toast('Import successful! '+Object.keys(_importData||{}).length+' rooms loaded.');
+
+    _importData=null;
+    document.getElementById('import-file').value='';
+    document.getElementById('import-preview').style.display='none';
+    await renderAdminAll();renderRooms();
+    toast(`Import done: ${added} added, ${updated} updated.`);
   }catch(e){toast('Import failed. Check connection and try again.');console.error(e);}
   finally{btn.textContent='Import now';btn.disabled=false;}
 }
