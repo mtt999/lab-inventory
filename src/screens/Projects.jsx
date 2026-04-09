@@ -3,22 +3,10 @@ import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
 import Modal from '../components/Modal'
 import ProjectMaterials from './ProjectMaterials'
-function MaterialStorage({ project }) {
-  return (
-    <div className="empty-state" style={{ padding: 48 }}>
-      <div className="empty-icon">📦</div>
-      <div>Material Storage — coming soon</div>
-    </div>
-  )
-}
-function ProjectDatabase({ project }) {
-  return (
-    <div className="empty-state" style={{ padding: 48 }}>
-      <div className="empty-icon">🗄️</div>
-      <div>Database — coming soon</div>
-    </div>
-  )
-}
+import MaterialStorage from './MaterialStorage'
+import ProjectDatabase from './ProjectDatabase'
+
+
 
 // ── Shared info cell ──────────────────────────────────────────
 function InfoCell({ label, value }) {
@@ -518,8 +506,7 @@ export default function Projects() {
                 {subTab === 'info'      && <ProjectInfo project={activeProject} users={users} onSaved={loadActiveProject} />}
                 {subTab === 'materials' && <ProjectMaterials project={activeProject} />}
                 {subTab === 'storage'   && <MaterialStorage project={activeProject} />}
-                {subTab === 'database'  && <ProjectDatabase project={activeProject} />}
-              </div>
+                {subTab === 'database'  && <ProjectDatabase project={activeProject} />}              </div>
             </div>
           )}
         </div>
