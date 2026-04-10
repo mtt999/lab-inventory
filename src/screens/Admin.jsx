@@ -405,7 +405,7 @@ export default function Admin() {
     byRoom[name].push(s)
   })
 
-  const tabs = ['rooms', 'supplies', 'users', 'import', 'settings']
+  const tabs = ['rooms', 'supplies', 'users', 'students', 'import', 'settings']
 
   return (
     <div>
@@ -529,6 +529,9 @@ export default function Admin() {
         </div>
       )}
 
+      {/* ── STUDENTS ── */}
+      {tab === 'students' && <StudentsTab toast={toast} />}
+
       {/* ── IMPORT ── */}
       {tab === 'import' && (
         <div>
@@ -631,6 +634,195 @@ export default function Admin() {
           onSaved={photoModal.onSaved}
         />
       )}
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// STUDENTS TAB
+// ══════════════════════════════════════════════════════════════
+const PROJECT_GROUPS = ['Material', 'Sustainability', 'GPR', 'Mechanic', 'Other']
+const DEGREES = ['MS', 'PhD', 'BS', 'Other']
+
+function StudentsTab({ toast }) {
+  const [students, setStudents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [editStudent, setEditStudent] = useState(null)
+  const [importData, setImportData] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const fileRef = useRef(null)
+
+  useEffect(() => { loadStudents() }, [])
+
+  async function loadStudents() {
+    setLoading(true)
+    const { data } = await sb.from('users').select('*').eq('role', 'student').order('name')
+    setStudents(data || [])
+    setLoading(false)
+  }
+
+  async function saveStudent(form, id) {
+    if (!form.name.trim()) { toast('Name is required.'); return }
+    if (!form.pin || !/^\d{4}$/.test(form.pin)) { if (!id) { toast('PIN must be 4 digits.'); return } }
+    const payload = { name: form.name.trim(), email: form.email||null, phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null, supervisor: form.supervisor||null, project_group: form.project_group||null, role: 'student', is_active: true }
+    if (form.pin && /^\d{4}$/.test(form.pin)) payload.pin = form.pin
+    if (id) await sb.from('users').update(payload).eq('id', id)
+    else await sb.from('users').insert(payload)
+    setShowModal(false); setEditStudent(null); loadStudents(); toast('Student saved.')
+  }
+
+  async function toggleActive(s) {
+    await sb.from('users').update({ is_active: !s.is_active }).eq('id', s.id)
+    loadStudents(); toast(s.is_active ? 'Student deactivated.' : 'Student activated.')
+  }
+
+  async function deleteStudent(id) {
+    if (!confirm('Delete this student?')) return
+    await sb.from('users').delete().eq('id', id)
+    loadStudents(); toast('Student deleted.')
+  }
+
+  // Excel import
+  function parseStudentExcel(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'binary' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+          const students = []
+          for (let i = 1; i < rows.length; i++) {
+            const [name, email, phone, degree, year_semester, supervisor, project_group] = rows[i]
+            if (name?.trim()) students.push({ name: name.trim(), email: email||'', phone: phone||'', degree: degree||'', year_semester: year_semester||'', supervisor: supervisor||'', project_group: project_group||'' })
+          }
+          resolve(students)
+        } catch(err) { reject(err) }
+      }
+      reader.onerror = reject
+      reader.readAsBinaryString(file)
+    })
+  }
+
+  async function confirmImport() {
+    if (!importData) return
+    setImporting(true)
+    let added = 0
+    for (const s of importData) {
+      const pin = Math.floor(1000 + Math.random() * 9000).toString()
+      const { error } = await sb.from('users').insert({ ...s, pin, role: 'student', is_active: true })
+      if (!error) added++
+    }
+    setImportData(null); setImporting(false); loadStudents()
+    toast(`${added} students imported. PINs auto-assigned — update them in edit.`)
+  }
+
+  const blankForm = { name:'', pin:'', email:'', phone:'', degree:'', year_semester:'', supervisor:'', project_group:'' }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-16">
+        <div style={{ fontSize: 14, color: 'var(--text2)' }}>{students.length} student{students.length!==1?'s':''}</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆️ Import Excel</button>
+          <button className="btn btn-sm btn-primary" onClick={() => { setEditStudent(null); setShowModal(true) }}>+ Add student</button>
+        </div>
+      </div>
+
+      <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={async e => {
+        try { const d = await parseStudentExcel(e.target.files[0]); setImportData(d) } catch { toast('Error reading file.') }
+      }} />
+
+      {/* Import preview */}
+      {importData && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-title">Import preview — {importData.length} students</div>
+          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>Expected columns: Name · Email · Phone · Degree · Year/Semester · Supervisor · Project Group</div>
+          {importData.slice(0,3).map((s,i) => <div key={i} style={{ fontSize: 13, padding: '3px 0', color: 'var(--text2)' }}>· {s.name} {s.email ? `· ${s.email}` : ''}</div>)}
+          {importData.length > 3 && <div style={{ fontSize: 12, color: 'var(--text3)' }}>…and {importData.length-3} more</div>}
+          <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+            <button className="btn btn-primary btn-sm" onClick={confirmImport} disabled={importing}>{importing ? 'Importing…' : 'Import now'}</button>
+            <button className="btn btn-sm" onClick={() => setImportData(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* Student list */}
+      {loading ? <div className="empty-state"><div className="spinner" style={{ margin: '0 auto' }} /></div>
+        : students.length === 0 ? <div className="empty-state" style={{ padding: 24 }}><div className="empty-icon">👥</div>No students yet.</div>
+        : students.map(s => (
+          <div key={s.id} className="card" style={{ padding: '12px 18px', marginBottom: 10, opacity: s.is_active ? 1 : 0.5 }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div style={{ fontWeight: 600 }}>{s.name} {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
+                  {s.email && <span>{s.email}</span>}
+                  {s.degree && <span>{s.degree}</span>}
+                  {s.project_group && <span>{s.project_group}</span>}
+                  {s.supervisor && <span>Supervisor: {s.supervisor}</span>}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-sm" onClick={() => { setEditStudent(s); setShowModal(true) }}>Edit</button>
+                <button className="btn btn-sm" onClick={() => toggleActive(s)}>{s.is_active ? 'Deactivate' : 'Activate'}</button>
+                <button className="btn btn-sm btn-danger" onClick={() => deleteStudent(s.id)}>Delete</button>
+              </div>
+            </div>
+          </div>
+        ))
+      }
+
+      {/* Add/Edit modal */}
+      {showModal && (
+        <StudentModal
+          student={editStudent}
+          onClose={() => { setShowModal(false); setEditStudent(null) }}
+          onSave={saveStudent}
+        />
+      )}
+    </div>
+  )
+}
+
+function StudentModal({ student, onClose, onSave }) {
+  const [form, setForm] = useState(student ? { name: student.name||'', pin:'', email: student.email||'', phone: student.phone||'', degree: student.degree||'', year_semester: student.year_semester||'', supervisor: student.supervisor||'', project_group: student.project_group||'' }
+    : { name:'', pin:'', email:'', phone:'', degree:'', year_semester:'', supervisor:'', project_group:'' })
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:520, width:'100%', maxHeight:'90vh', overflowY:'auto', border:'1px solid var(--border)' }}>
+        <div style={{ fontWeight:600, fontSize:16, marginBottom:20 }}>{student ? 'Edit student' : 'Add student'}</div>
+        <div className="grid-2">
+          <div className="field"><label>Full Name *</label><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="e.g. John Smith" autoFocus /></div>
+          <div className="field"><label>PIN (4 digits){student?' (leave blank to keep)':' *'}</label><input type="password" maxLength={4} value={form.pin} onChange={e=>setForm(f=>({...f,pin:e.target.value}))} placeholder="····" style={{width:100}} /></div>
+        </div>
+        <div className="grid-2">
+          <div className="field"><label>Email</label><input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="netid@illinois.edu" /></div>
+          <div className="field"><label>Phone</label><input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} placeholder="(217) 555-0000" /></div>
+        </div>
+        <div className="grid-2">
+          <div className="field"><label>Degree</label>
+            <select value={form.degree} onChange={e=>setForm(f=>({...f,degree:e.target.value}))}>
+              <option value="">— Select —</option>
+              {DEGREES.map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <div className="field"><label>Year & Semester Entered UIUC</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
+        </div>
+        <div className="grid-2">
+          <div className="field"><label>Supervisor</label><input value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} placeholder="e.g. Dr. Smith" /></div>
+          <div className="field"><label>Project Group</label>
+            <select value={form.project_group} onChange={e=>setForm(f=>({...f,project_group:e.target.value}))}>
+              <option value="">— Select —</option>
+              {PROJECT_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:10, marginTop:8 }}>
+          <button className="btn btn-primary" onClick={()=>onSave(form, student?.id)}>Save</button>
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
     </div>
   )
 }

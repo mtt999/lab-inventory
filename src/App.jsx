@@ -9,15 +9,25 @@ import Projects from './screens/Projects'
 import ProjectDetail from './screens/ProjectDetail'
 import History from './screens/History'
 import Admin from './screens/Admin'
+import TrainingRecords from './screens/TrainingRecords'
+import Profile from './screens/Profile'
 import Toast from './components/Toast'
 
 export default function App() {
-  const { session, screen, refreshCache } = useAppStore()
+  const { session, screen, refreshCache, setScreen } = useAppStore()
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     refreshCache().finally(() => setLoading(false))
   }, [])
+
+  // Redirect students away from restricted screens
+  useEffect(() => {
+    if (session?.role === 'student') {
+      const allowed = ['projects', 'project-detail', 'training', 'profile']
+      if (!allowed.includes(screen)) setScreen('projects')
+    }
+  }, [session, screen])
 
   if (loading) return (
     <div style={{ position: 'fixed', inset: 0, background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, zIndex: 999 }}>
@@ -36,13 +46,13 @@ export default function App() {
     'project-detail': <ProjectDetail />,
     history: <History />,
     admin: <Admin />,
+    training: <TrainingRecords />,
+    profile: <Profile />,
   }
 
   return (
     <>
-      <Layout>
-        {screens[screen] || <Home />}
-      </Layout>
+      <Layout>{screens[screen] || <Home />}</Layout>
       <Toast />
     </>
   )

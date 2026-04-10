@@ -27,7 +27,7 @@ export default function Login() {
     } else {
       const { data } = await sb.from('users').select('*').eq('pin', p).limit(1)
       if (data && data.length > 0) {
-        setSession({ role: 'user', username: data[0].name })
+        setSession({ role: data[0].role || 'user', username: data[0].name, userId: data[0].id })
       } else {
         setError('Incorrect PIN')
         setPin('')

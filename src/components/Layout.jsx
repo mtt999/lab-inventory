@@ -3,13 +3,18 @@ import { useAppStore } from '../store/useAppStore'
 export default function Layout({ children }) {
   const { session, setScreen, setSession, screen } = useAppStore()
 
-  function logout() {
-    setSession(null)
-  }
+  function logout() { setSession(null) }
 
-  const navItems = [
+  const isStudent = session?.role === 'student'
+
+  const navItems = isStudent ? [
+    { label: 'Projects', screen: 'projects' },
+    { label: 'Training', screen: 'training' },
+    { label: 'Profile', screen: 'profile' },
+  ] : [
     { label: 'Inventory', screen: 'home' },
     { label: 'Projects', screen: 'projects' },
+    { label: 'Training', screen: 'training' },
     { label: 'History', screen: 'history' },
     ...(session?.role === 'admin' ? [{ label: 'Admin', screen: 'admin' }] : []),
   ]
@@ -25,14 +30,12 @@ export default function Layout({ children }) {
           Lab<span style={{ color: 'var(--text3)' }}>Stock</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <nav style={{ display: 'flex', gap: 4 }}>
+          <nav style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {navItems.map(item => (
-              <button
-                key={item.screen}
-                className={'btn btn-sm' + (activeScreen === item.screen ? ' btn-primary' : '')}
-                style={{ border: 'none', background: activeScreen === item.screen ? 'var(--accent-light)' : 'transparent', color: activeScreen === item.screen ? 'var(--accent)' : 'var(--text2)' }}
-                onClick={() => setScreen(item.screen)}
-              >
+              <button key={item.screen}
+                className="btn btn-sm"
+                style={{ border: 'none', background: activeScreen === item.screen ? 'var(--accent-light)' : 'transparent', color: activeScreen === item.screen ? 'var(--accent)' : 'var(--text2)', fontWeight: activeScreen === item.screen ? 600 : 500 }}
+                onClick={() => setScreen(item.screen)}>
                 {item.label}
               </button>
             ))}
@@ -41,7 +44,7 @@ export default function Layout({ children }) {
           <button className="btn btn-sm" onClick={logout}>Sign out</button>
         </div>
       </header>
-      <main style={{ flex: 1, maxWidth: 720, margin: '0 auto', width: '100%', padding: '32px 20px' }}>
+      <main style={{ flex: 1, maxWidth: 900, margin: '0 auto', width: '100%', padding: '32px 20px' }}>
         {children}
       </main>
     </div>
