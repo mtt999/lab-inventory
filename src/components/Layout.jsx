@@ -16,7 +16,7 @@ export default function Layout({ children }) {
     { label: 'Projects', screen: 'projects' },
     { label: 'Training', screen: 'training' },
     { label: 'History', screen: 'history' },
-    ...(session?.role === 'admin' ? [{ label: 'Admin', screen: 'admin' }] : []),
+    ...(...(session?.role === "admin" ? [{ label: "Admin", screen: "admin" }] : [])),
   ]
 
   const activeScreen = ['home','inspection','results'].includes(screen) ? 'home'
@@ -40,7 +40,7 @@ export default function Layout({ children }) {
               </button>
             ))}
           </nav>
-          <span style={{ fontSize: 13, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>{session?.username}</span>
+          <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "var(--mono)" }}>{session?.role !== "admin" ? session?.role === "admin" ? "" : session?.username : ""}</span>
           <button className="btn btn-sm" onClick={logout}>Sign out</button>
         </div>
       </header>
@@ -50,3 +50,4 @@ export default function Layout({ children }) {
     </div>
   )
 }
+
