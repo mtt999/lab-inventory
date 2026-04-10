@@ -16,12 +16,15 @@ export default function Layout({ children }) {
     { label: 'Projects', screen: 'projects' },
     { label: 'Training', screen: 'training' },
     { label: 'History', screen: 'history' },
-    ...(...(session?.role === "admin" ? [{ label: "Admin", screen: "admin" }] : [])),
+    ...(session?.role === 'admin' ? [{ label: 'Admin', screen: 'admin' }] : []),
   ]
 
   const activeScreen = ['home','inspection','results'].includes(screen) ? 'home'
     : ['projects','project-detail'].includes(screen) ? 'projects'
     : screen
+
+  // Show username only for non-admin (admin nav button already identifies them)
+  const displayName = session?.role === 'admin' ? '' : session?.username
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
@@ -40,7 +43,7 @@ export default function Layout({ children }) {
               </button>
             ))}
           </nav>
-          <span style={{ fontSize: 13, color: "var(--text2)", fontFamily: "var(--mono)" }}>{session?.role !== "admin" ? session?.role === "admin" ? "" : session?.username : ""}</span>
+          {displayName && <span style={{ fontSize: 13, color: 'var(--text2)', fontFamily: 'var(--mono)' }}>{displayName}</span>}
           <button className="btn btn-sm" onClick={logout}>Sign out</button>
         </div>
       </header>
@@ -50,4 +53,3 @@ export default function Layout({ children }) {
     </div>
   )
 }
-
