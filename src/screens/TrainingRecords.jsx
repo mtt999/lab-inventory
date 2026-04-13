@@ -249,7 +249,9 @@ function EquipmentTraining({ students, session }) {
   const [loading, setLoading] = useState(true)
   const [showAddEquip, setShowAddEquip] = useState(false)
   const [newEquip, setNewEquip] = useState({ name: '', description: '' })
-  const [addingRecord, setAddingRecord] = useState(null) // { userId }
+  const [addingRecord, setAddingRecord] = useState(null)
+  const [importing, setImporting] = useState(false)
+  const equipImportRef = useRef(null)
 
   useEffect(() => { load() }, [])
 
@@ -289,6 +291,41 @@ function EquipmentTraining({ students, session }) {
     load(); toast('Equipment deleted.')
   }
 
+  async function importEquipmentFromExcel(file) {
+    if (!file) return
+    setImporting(true)
+    try {
+      const XLSX = await import('xlsx')
+      const reader = new FileReader()
+      reader.onload = async e => {
+        try {
+          const wb = XLSX.read(e.target.result, { type: 'binary' })
+          const ws = wb.Sheets[wb.SheetNames[0]]
+          const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
+          const items = []
+          for (let i = 1; i < rows.length; i++) {
+            const name = String(rows[i][0] || '').trim()
+            const description = String(rows[i][1] || '').trim() || null
+            if (name) items.push({ name, description })
+          }
+          if (!items.length) { toast('No equipment found in file.'); setImporting(false); return }
+          // Skip duplicates
+          const existing = equipment.map(e => e.name.toLowerCase())
+          const newItems = items.filter(item => !existing.includes(item.name.toLowerCase()))
+          if (newItems.length === 0) { toast('All equipment already exists.'); setImporting(false); return }
+          for (const item of newItems) {
+            await sb.from('equipment_list').insert(item)
+          }
+          load()
+          toast(`${newItems.length} equipment item${newItems.length !== 1 ? 's' : ''} imported.`)
+        } catch (err) { toast('Error reading file.') }
+        setImporting(false)
+      }
+      reader.onerror = () => { toast('Error reading file.'); setImporting(false) }
+      reader.readAsBinaryString(file)
+    } catch (e) { toast('Import failed.'); setImporting(false) }
+  }
+
   async function addTrainingRecord(userId, equipmentId, date, trainedBy, passed) {
     const expires = date ? new Date(new Date(date).getTime() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null
     await sb.from('training_equipment').insert({ user_id: userId, equipment_id: equipmentId, trained_date: date, trained_by: trainedBy, passed_exam: passed, expires_at: expires })
@@ -314,22 +351,54 @@ function EquipmentTraining({ students, session }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <SectionHeader title="Equipment Training" count={students.length} />
         {canEdit(session) && (
-          <button className="btn btn-sm btn-primary" onClick={() => setShowAddEquip(true)}>+ Add equipment</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-sm" onClick={() => equipImportRef.current?.click()} disabled={importing}>
+              {importing ? '⏳ Importing…' : '⬆️ Import Excel'}
+            </button>
+            <input ref={equipImportRef} type="file" accept=".xlsx" style={{ display: 'none' }}
+              onChange={e => { importEquipmentFromExcel(e.target.files[0]); e.target.value = '' }} />
+            <button className="btn btn-sm btn-primary" onClick={() => setShowAddEquip(true)}>+ Add equipment</button>
+          </div>
         )}
       </div>
 
       {/* Equipment master list */}
-      {canEdit(session) && equipment.length > 0 && (
+      {canEdit(session) && (
         <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Equipment list ({equipment.length})</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {equipment.map(e => (
-              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 99, padding: '4px 12px' }}>
-                <span style={{ fontSize: 13, fontWeight: 500 }}>{e.name}</span>
-                <button onClick={() => deleteEquipment(e.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
-              </div>
-            ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Equipment list ({equipment.length})</div>
+            <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => {
+              const XLSX = window.XLSX || {}
+              const data = [['Equipment Name', 'Description (optional)'], ['Example: Gyratory Compactor', 'Asphalt compaction equipment'], ['Example: Marshall Hammer', '']]
+              if (window.XLSX) {
+                const ws = window.XLSX.utils.aoa_to_sheet(data)
+                ws['!cols'] = [{ wch: 40 }, { wch: 40 }]
+                const wb = window.XLSX.utils.book_new()
+                window.XLSX.utils.book_append_sheet(wb, ws, 'Equipment')
+                window.XLSX.writeFile(wb, 'equipment_template.xlsx')
+              } else {
+                import('xlsx').then(XLSX => {
+                  const ws = XLSX.utils.aoa_to_sheet(data)
+                  ws['!cols'] = [{ wch: 40 }, { wch: 40 }]
+                  const wb = XLSX.utils.book_new()
+                  XLSX.utils.book_append_sheet(wb, ws, 'Equipment')
+                  XLSX.writeFile(wb, 'equipment_template.xlsx')
+                })
+              }
+            }}>⬇️ Download template</button>
           </div>
+          {equipment.length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>No equipment yet. Add one by one or import from Excel.</div>
+          ) : (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {equipment.map(e => (
+                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 99, padding: '4px 12px' }}>
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{e.name}</span>
+                  <button onClick={() => deleteEquipment(e.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
