@@ -252,6 +252,7 @@ function EquipmentTraining({ students, session }) {
   const [addingRecord, setAddingRecord] = useState(null)
   const [importing, setImporting] = useState(false)
   const equipImportRef = useRef(null)
+  const [equipSubTab, setEquipSubTab] = useState('training')
 
   useEffect(() => { load() }, [])
 
@@ -348,146 +349,165 @@ function EquipmentTraining({ students, session }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <SectionHeader title="Equipment Training" count={students.length} />
-        {canEdit(session) && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn btn-sm" onClick={() => equipImportRef.current?.click()} disabled={importing}>
-              {importing ? '⏳ Importing…' : '⬆️ Import Excel'}
-            </button>
-            <input ref={equipImportRef} type="file" accept=".xlsx" style={{ display: 'none' }}
-              onChange={e => { importEquipmentFromExcel(e.target.files[0]); e.target.value = '' }} />
-            <button className="btn btn-sm btn-primary" onClick={() => setShowAddEquip(true)}>+ Add equipment</button>
-          </div>
-        )}
+      <SectionHeader title="Equipment Training" count={students.length} />
+
+      {/* Sub-tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+        {[{ key: 'training', label: 'Training Records' }, { key: 'history', label: 'Equipment History' }].map(t => (
+          <button key={t.key} onClick={() => setEquipSubTab(t.key)}
+            style={{ padding: '8px 18px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', color: equipSubTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${equipSubTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s' }}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Equipment master list */}
-      {canEdit(session) && (
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Equipment list ({equipment.length})</div>
-            <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => {
-              const XLSX = window.XLSX || {}
-              const data = [['Equipment Name', 'Description (optional)'], ['Example: Gyratory Compactor', 'Asphalt compaction equipment'], ['Example: Marshall Hammer', '']]
-              if (window.XLSX) {
-                const ws = window.XLSX.utils.aoa_to_sheet(data)
-                ws['!cols'] = [{ wch: 40 }, { wch: 40 }]
-                const wb = window.XLSX.utils.book_new()
-                window.XLSX.utils.book_append_sheet(wb, ws, 'Equipment')
-                window.XLSX.writeFile(wb, 'equipment_template.xlsx')
-              } else {
+      {/* ── EQUIPMENT HISTORY TAB ── */}
+      {equipSubTab === 'history' && (
+        <div>
+          {canEdit(session) && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              <button className="btn btn-sm" onClick={() => equipImportRef.current?.click()} disabled={importing}>
+                {importing ? '⏳ Importing…' : '⬆️ Import Excel'}
+              </button>
+              <input ref={equipImportRef} type="file" accept=".xlsx" style={{ display: 'none' }}
+                onChange={e => { importEquipmentFromExcel(e.target.files[0]); e.target.value = '' }} />
+              <button className="btn btn-sm btn-primary" onClick={() => setShowAddEquip(true)}>+ Add equipment</button>
+              <button className="btn btn-sm" onClick={() => {
                 import('xlsx').then(XLSX => {
-                  const ws = XLSX.utils.aoa_to_sheet(data)
-                  ws['!cols'] = [{ wch: 40 }, { wch: 40 }]
-                  const wb = XLSX.utils.book_new()
-                  XLSX.utils.book_append_sheet(wb, ws, 'Equipment')
+                  const data = [['Equipment Name', 'Description (optional)'], ['Example: Gyratory Compactor', 'Asphalt compaction equipment']]
+                  const ws = XLSX.utils.aoa_to_sheet(data); ws['!cols'] = [{ wch: 40 }, { wch: 40 }]
+                  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Equipment')
                   XLSX.writeFile(wb, 'equipment_template.xlsx')
                 })
-              }
-            }}>⬇️ Download template</button>
-          </div>
+              }}>⬇️ Template</button>
+            </div>
+          )}
+
+          {showAddEquip && (
+            <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, marginBottom: 12 }}>New equipment</div>
+              <div className="grid-2">
+                <div className="field" style={{ marginBottom: 0 }}><label>Name *</label><input value={newEquip.name} onChange={e => setNewEquip(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Gyratory Compactor" autoFocus /></div>
+                <div className="field" style={{ marginBottom: 0 }}><label>Description</label><input value={newEquip.description} onChange={e => setNewEquip(f => ({ ...f, description: e.target.value }))} placeholder="Optional" /></div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button className="btn btn-sm btn-primary" onClick={addEquipment}>Add</button>
+                <button className="btn btn-sm" onClick={() => setShowAddEquip(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
           {equipment.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text3)', padding: '8px 0' }}>No equipment yet. Add one by one or import from Excel.</div>
+            <div className="empty-state" style={{ padding: 32 }}><div className="empty-icon">🔧</div>No equipment yet. Import from Excel or add one by one.</div>
           ) : (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {equipment.map(e => (
-                <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 99, padding: '4px 12px' }}>
-                  <span style={{ fontSize: 13, fontWeight: 500 }}>{e.name}</span>
-                  <button onClick={() => deleteEquipment(e.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: 12, padding: 0, lineHeight: 1 }}>✕</button>
-                </div>
-              ))}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={{ width: 40 }}>#</th>
+                    <th>Equipment Name</th>
+                    <th>Description</th>
+                    <th>Date Added</th>
+                    {canEdit(session) && <th style={{ width: 90 }}></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {equipment.map((e, i) => (
+                    <tr key={e.id}>
+                      <td style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{i + 1}</td>
+                      <td style={{ fontWeight: 500 }}>{e.name}</td>
+                      <td style={{ fontSize: 13, color: 'var(--text2)' }}>{e.description || '—'}</td>
+                      <td style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>
+                        {new Date(e.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+                      </td>
+                      {canEdit(session) && (
+                        <td><button className="btn btn-sm btn-danger" style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => deleteEquipment(e.id)}>Remove</button></td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ padding: '10px 16px', fontSize: 12, color: 'var(--text3)', borderTop: '1px solid var(--border)' }}>
+                {equipment.length} equipment item{equipment.length !== 1 ? 's' : ''} total
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Add equipment modal */}
-      {showAddEquip && (
-        <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 12 }}>New equipment</div>
-          <div className="grid-2">
-            <div className="field" style={{ marginBottom: 0 }}><label>Name *</label><input value={newEquip.name} onChange={e => setNewEquip(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Gyratory Compactor" autoFocus /></div>
-            <div className="field" style={{ marginBottom: 0 }}><label>Description</label><input value={newEquip.description} onChange={e => setNewEquip(f => ({ ...f, description: e.target.value }))} placeholder="Optional description" /></div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button className="btn btn-sm btn-primary" onClick={addEquipment}>Add</button>
-            <button className="btn btn-sm" onClick={() => setShowAddEquip(false)}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* Students table */}
-      {students.map(u => {
-        const recs = getRecords(u.id)
-        return (
-          <div key={u.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', marginBottom: 12, overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', background: 'var(--surface2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontWeight: 600 }}>{u.name}</div>
-                <div style={{ fontSize: 12, color: 'var(--text3)' }}>{u.project_group || ''}{u.supervisor ? ` · ${u.supervisor}` : ''}</div>
-              </div>
-              {canEdit(session) && (
-                <button className="btn btn-sm" onClick={() => setAddingRecord({ userId: u.id })}>+ Add training</button>
-              )}
-            </div>
-            {recs.length === 0 ? (
-              <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No equipment training records yet.</div>
-            ) : (
-              <table style={{ fontSize: 13 }}>
-                <thead>
-                  <tr>
-                    <th>Equipment</th>
-                    <th>Date</th>
-                    <th>Trained By</th>
-                    <th>Passed Exam</th>
-                    <th>Expires</th>
-                    {canEdit(session) && <th></th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {recs.map(rec => {
-                    const eq = equipment.find(e => e.id === rec.equipment_id)
-                    const expired = isExpired(rec)
-                    const soon = isExpiringSoon(rec)
-                    return (
-                      <tr key={rec.id} style={{ background: expired ? 'var(--accent2-light)' : soon ? 'var(--warn-light)' : 'transparent' }}>
-                        <td style={{ fontWeight: 500 }}>{eq?.name || 'Unknown'}</td>
-                        <td style={{ fontFamily: 'var(--mono)' }}>{rec.trained_date || '—'}</td>
-                        <td>{rec.trained_by || '—'}</td>
-                        <td>
-                          {canEdit(session) ? (
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 0 }}>
-                              <input type="checkbox" checked={rec.passed_exam || false} onChange={() => togglePassed(rec)} style={{ width: 'auto' }} />
-                              <span style={{ color: rec.passed_exam ? 'var(--accent)' : 'var(--text3)' }}>{rec.passed_exam ? 'Yes' : 'No'}</span>
-                            </label>
-                          ) : <StatusBadge done={rec.passed_exam} />}
-                        </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: expired ? 'var(--accent2)' : soon ? '#92400e' : 'var(--text2)' }}>
-                          {rec.expires_at || '—'}
-                          {expired && ' ⚠️ EXPIRED'}
-                          {soon && ' ⏰ Soon'}
-                        </td>
-                        {canEdit(session) && <td><button className="btn btn-sm btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => deleteRecord(rec.id)}>✕</button></td>}
+      {/* ── TRAINING RECORDS TAB ── */}
+      {equipSubTab === 'training' && (
+        <div>
+          {students.map(u => {
+            const recs = getRecords(u.id)
+            return (
+              <div key={u.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', marginBottom: 12, overflow: 'hidden' }}>
+                <div style={{ padding: '12px 16px', background: 'var(--surface2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{u.name}</div>
+                    <div style={{ fontSize: 12, color: 'var(--text3)' }}>{u.project_group || ''}{u.supervisor ? ` · ${u.supervisor}` : ''}</div>
+                  </div>
+                  {canEdit(session) && (
+                    <button className="btn btn-sm" onClick={() => setAddingRecord({ userId: u.id })}>+ Add training</button>
+                  )}
+                </div>
+                {recs.length === 0 ? (
+                  <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No equipment training records yet.</div>
+                ) : (
+                  <table style={{ fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th>Equipment</th>
+                        <th>Date</th>
+                        <th>Trained By</th>
+                        <th>Passed Exam</th>
+                        <th>Expires</th>
+                        {canEdit(session) && <th></th>}
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            )}
-          </div>
-        )
-      })}
-
-      {/* Add training record panel */}
-      {addingRecord && (
-        <AddTrainingRecord
-          userId={addingRecord.userId}
-          equipment={equipment}
-          session={session}
-          onSave={addTrainingRecord}
-          onClose={() => setAddingRecord(null)}
-        />
+                    </thead>
+                    <tbody>
+                      {recs.map(rec => {
+                        const eq = equipment.find(e => e.id === rec.equipment_id)
+                        const expired = isExpired(rec)
+                        const soon = isExpiringSoon(rec)
+                        return (
+                          <tr key={rec.id} style={{ background: expired ? 'var(--accent2-light)' : soon ? 'var(--warn-light)' : 'transparent' }}>
+                            <td style={{ fontWeight: 500 }}>{eq?.name || 'Unknown'}</td>
+                            <td style={{ fontFamily: 'var(--mono)' }}>{rec.trained_date || '—'}</td>
+                            <td>{rec.trained_by || '—'}</td>
+                            <td>
+                              {canEdit(session) ? (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', marginBottom: 0 }}>
+                                  <input type="checkbox" checked={rec.passed_exam || false} onChange={() => togglePassed(rec)} style={{ width: 'auto' }} />
+                                  <span style={{ color: rec.passed_exam ? 'var(--accent)' : 'var(--text3)' }}>{rec.passed_exam ? 'Yes' : 'No'}</span>
+                                </label>
+                              ) : <StatusBadge done={rec.passed_exam} />}
+                            </td>
+                            <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: expired ? 'var(--accent2)' : soon ? '#92400e' : 'var(--text2)' }}>
+                              {rec.expires_at || '—'}
+                              {expired && ' ⚠️ EXPIRED'}
+                              {soon && ' ⏰ Soon'}
+                            </td>
+                            {canEdit(session) && <td><button className="btn btn-sm btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => deleteRecord(rec.id)}>✕</button></td>}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )
+          })}
+          {addingRecord && (
+            <AddTrainingRecord
+              userId={addingRecord.userId}
+              equipment={equipment}
+              session={session}
+              onSave={addTrainingRecord}
+              onClose={() => setAddingRecord(null)}
+            />
+          )}
+        </div>
       )}
     </div>
   )
