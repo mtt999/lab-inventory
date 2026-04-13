@@ -21,7 +21,7 @@ export default function Layout({ children }) {
         {/* Logo — always goes home */}
         <div onClick={() => setScreen('dashboard')}
           style={{ fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 16, letterSpacing: '-0.5px', color: 'var(--accent)', cursor: 'pointer' }}>
-          Lab<span style={{ color: 'var(--text3)' }}>Stock</span>
+          ICT-<span style={{ color: "var(--text3)" }}>Lab</span>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
