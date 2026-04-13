@@ -1,3 +1,4 @@
+import FloorPlanPicker from '../components/FloorPlanPicker'
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
@@ -60,30 +61,7 @@ function PrintLabel({ material, project, barcodeId }) {
 }
 
 // ── Floor plan placeholder ────────────────────────────────────
-function FloorPlan({ locations, onLocationClick }) {
-  return (
-    <div style={{ background: 'var(--surface2)', border: '2px dashed var(--border)', borderRadius: 'var(--radius-lg)', padding: 32, textAlign: 'center', position: 'relative', minHeight: 220 }}>
-      <div style={{ fontSize: 28, marginBottom: 8 }}>🗺️</div>
-      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text2)', marginBottom: 4 }}>Floor Plan</div>
-      <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 16 }}>Floor plan image coming soon.<br />Selected locations are shown below.</div>
 
-      {/* Show confirmed locations as chips */}
-      {locations && locations.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
-          {locations.map((loc, i) => (
-            <span key={i} style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid var(--accent)', borderRadius: 99, padding: '4px 14px', fontSize: 13, fontWeight: 500 }}>
-              📍 {loc.location}{loc.detail ? ` · ${loc.detail}` : ''}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text3)', fontStyle: 'italic' }}>
-        Upload your floor plan image in Settings to enable interactive location selection.
-      </div>
-    </div>
-  )
-}
 
 // ── Barcode scanner (camera) ──────────────────────────────────
 function BarcodeScanner({ onScanned, onClose }) {
@@ -154,6 +132,7 @@ export default function MaterialStorage({ project }) {
   const [selectedId, setSelectedId] = useState(null)
   const [showScanner, setShowScanner] = useState(false)
   const [showPrint, setShowPrint] = useState(false)
+  const [showFloorPlan, setShowFloorPlan] = useState(false)
   const [saving, setSaving] = useState(false)
   const [editingBarcode, setEditingBarcode] = useState(null) // material id being edited
 
@@ -332,7 +311,33 @@ export default function MaterialStorage({ project }) {
           {/* ── Floor plan / Location ── */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 20 }}>
             <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Storage Location</div>
-            <FloorPlan locations={selected.locations || []} />
+            {/* Show current locations as chips */}
+            {(selected.locations || []).length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                {(selected.locations || []).map((loc, i) => (
+                  <span key={i} style={{ background: 'var(--accent-light)', color: 'var(--accent)', borderRadius: 99, padding: '4px 14px', fontSize: 13, fontWeight: 500 }}>
+                    📍 {loc.detail || loc.location_id || loc.location}
+                  </span>
+                ))}
+              </div>
+            )}
+            <button className="btn btn-sm btn-primary" onClick={() => setShowFloorPlan(true)}>
+              🗺️ {(selected.locations || []).length > 0 ? 'Update location on floor plan' : 'Assign location on floor plan'}
+            </button>
+            {showFloorPlan && (
+              <FloorPlanPicker
+                projectId={project.id}
+                projectName={project.name}
+                materialId={selected.id}
+                materialType={selected.material_type}
+                currentLocations={selected.locations || []}
+                onConfirm={async (locs) => {
+                  await sb.from('project_materials').update({ locations: locs }).eq('id', selected.id)
+                  load()
+                }}
+                onClose={() => setShowFloorPlan(false)}
+              />
+            )}
           </div>
 
           {/* ── Storage notes ── */}

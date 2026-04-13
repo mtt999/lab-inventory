@@ -289,12 +289,9 @@ function LocationForm({ form, setForm, projectId, projectName, materialId, mater
 
   return (
     <Section title="4 · Material Location">
-      <button className="btn btn-sm btn-primary" type="button" onClick={() => setShowPicker(true)}>
-        🗺️ Open floor plan
-      </button>
-
+      {/* Selected locations chips */}
       {locations.length > 0 && (
-        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
           {locations.map((loc, i) => (
             <span key={i} style={{ background: 'var(--accent-light)', color: 'var(--accent)', borderRadius: 99, padding: '4px 12px', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
               📍 {loc.detail || loc.location_id || loc.location}
@@ -304,6 +301,12 @@ function LocationForm({ form, setForm, projectId, projectName, materialId, mater
         </div>
       )}
 
+      {/* Open floor plan button */}
+      <button className="btn btn-sm btn-primary" type="button" onClick={() => setShowPicker(true)}>
+        🗺️ {locations.length > 0 ? 'Update on floor plan' : 'Select on floor plan'}
+      </button>
+
+      {/* Floor plan picker popup */}
       {showPicker && (
         <FloorPlanPicker
           projectId={projectId}

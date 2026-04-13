@@ -120,6 +120,78 @@ function ICTMap({ occupancy, selected, onToggle, canEdit }) {
         )
       })}
 
+      {/* ── High Bay C shelves: 14 shelves along right wall, numbered 1-14 bottom to top ── */}
+      {Array.from({ length: 14 }, (_, i) => {
+        const shelfNum = i + 1
+        const id = `ICT-HBC-S${shelfNum}`
+        // Right wall of HBC: x=472, y=6, w=162, h=100
+        // Shelves along right wall (x ~620), stacked bottom to top
+        // Each shelf unit is ~6px wide, rows are 3 cols
+        const shelfX = 620
+        const shelfH = 6  // shelf header height
+        const rowH = 8
+        const unitH = shelfH + 3 * rowH
+        const shelfY = 6 + 100 - (i + 1) * (unitH + 2)  // bottom to top
+        return (
+          <g key={id}>
+            <rect x={shelfX} y={shelfY} width={12} height={shelfH} fill="#8b6914" rx="1"/>
+            <text x={shelfX + 6} y={shelfY + 5} textAnchor="middle" fontSize={4} fontFamily="sans-serif" fill="#fff">{shelfNum}</text>
+            {[1,2,3].map(row => {
+              const rowId = `${id}-R${row}`
+              const ry0 = shelfY + shelfH + (row - 1) * rowH
+              const occ = occupancy[rowId]
+              return (
+                <g key={rowId} style={{ cursor: occ?.occupied && !selected.includes(rowId) ? 'not-allowed' : 'pointer' }}
+                  onClick={e => { e.stopPropagation(); handleClick(rowId, `HBC Shelf ${shelfNum} · Row ${row}`, shelfX + 6, ry0 + rowH/2) }}>
+                  <rect x={shelfX} y={ry0} width={12} height={rowH - 1} rx="1"
+                    fill={selected.includes(rowId) ? C.selected : occ?.occupied ? C.occupied : '#d4a520'}
+                    stroke={selected.includes(rowId) ? C.selected_stroke : occ?.occupied ? C.occupied_stroke : '#8b6914'}
+                    strokeWidth={selected.includes(rowId) ? 1.5 : 0.8}/>
+                  <text x={shelfX + 6} y={ry0 + rowH - 2} textAnchor="middle" fontSize={4} fontFamily="sans-serif"
+                    fill={occ?.occupied && !selected.includes(rowId) ? '#fff' : '#3d2a00'}>R{row}</text>
+                </g>
+              )
+            })}
+          </g>
+        )
+      })}
+
+      {/* ── High Bay B shelves: 5 shelves clustered at LEFT side of top wall, numbered 1-5 left to right ── */}
+      {Array.from({ length: 5 }, (_, i) => {
+        const shelfNum = i + 1
+        const id = `ICT-HBB-S${shelfNum}`
+        // HBB: x=298, y=6, w=172, h=80
+        // All 5 shelves packed at the left side of top wall starting at x=300
+        const unitW = 18
+        const gap = 2
+        const startX = 300 + i * (unitW + gap)
+        const shelfY = 10
+        const shelfHeaderH = 5
+        const rowH = 7
+        return (
+          <g key={id}>
+            <rect x={startX} y={shelfY} width={unitW} height={shelfHeaderH} fill="#8b6914" rx="1"/>
+            <text x={startX + unitW/2} y={shelfY + 4} textAnchor="middle" fontSize={4} fontFamily="sans-serif" fill="#fff">S{shelfNum}</text>
+            {[1,2,3].map(row => {
+              const rowId = `${id}-R${row}`
+              const ry0 = shelfY + shelfHeaderH + (row - 1) * rowH
+              const occ = occupancy[rowId]
+              return (
+                <g key={rowId} style={{ cursor: occ?.occupied && !selected.includes(rowId) ? 'not-allowed' : 'pointer' }}
+                  onClick={e => { e.stopPropagation(); handleClick(rowId, `HBB Shelf ${shelfNum} · Row ${row}`, startX + unitW/2, ry0 + rowH/2) }}>
+                  <rect x={startX} y={ry0} width={unitW} height={rowH - 1} rx="1"
+                    fill={selected.includes(rowId) ? C.selected : occ?.occupied ? C.occupied : '#d4a520'}
+                    stroke={selected.includes(rowId) ? C.selected_stroke : occ?.occupied ? C.occupied_stroke : '#8b6914'}
+                    strokeWidth={selected.includes(rowId) ? 1.5 : 0.8}/>
+                  <text x={startX + unitW/2} y={ry0 + rowH - 2} textAnchor="middle" fontSize={4} fontFamily="sans-serif"
+                    fill={occ?.occupied && !selected.includes(rowId) ? '#fff' : '#3d2a00'}>R{row}</text>
+                </g>
+              )
+            })}
+          </g>
+        )
+      })}
+
       {tooltip && <Tooltip x={tooltip.x} y={tooltip.y} info={tooltip} onClose={() => setTooltip(null)} />}
     </svg>
   )
