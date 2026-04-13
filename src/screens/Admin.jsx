@@ -405,7 +405,7 @@ export default function Admin() {
     byRoom[name].push(s)
   })
 
-  const tabs = ['rooms', 'supplies', 'users', 'students']
+  const tabs = ['users', 'students']
 
   return (
     <div>
