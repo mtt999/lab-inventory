@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useAppStore } from './store/useAppStore'
 import Login from './screens/Login'
 import Layout from './components/Layout'
+import Dashboard from './screens/Dashboard'
 import Home from './screens/Home'
 import Inspection from './screens/Inspection'
 import Results from './screens/Results'
@@ -21,11 +22,16 @@ export default function App() {
     refreshCache().finally(() => setLoading(false))
   }, [])
 
+  // On login, always start at dashboard
+  useEffect(() => {
+    if (session && screen === 'home') setScreen('dashboard')
+  }, [session])
+
   // Redirect students away from restricted screens
   useEffect(() => {
     if (session?.role === 'student') {
-      const allowed = ['projects', 'project-detail', 'training', 'profile']
-      if (!allowed.includes(screen)) setScreen('projects')
+      const allowed = ['dashboard', 'projects', 'project-detail', 'training', 'profile']
+      if (!allowed.includes(screen)) setScreen('dashboard')
     }
   }, [session, screen])
 
@@ -39,6 +45,7 @@ export default function App() {
   if (!session) return <Login />
 
   const screens = {
+    dashboard: <Dashboard />,
     home: <Home />,
     inspection: <Inspection />,
     results: <Results />,
@@ -52,7 +59,7 @@ export default function App() {
 
   return (
     <>
-      <Layout>{screens[screen] || <Home />}</Layout>
+      <Layout>{screens[screen] || <Dashboard />}</Layout>
       <Toast />
     </>
   )

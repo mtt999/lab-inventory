@@ -8,28 +8,31 @@ export default function Layout({ children }) {
   const isStudent = session?.role === 'student'
 
   const navItems = isStudent ? [
-    { label: 'Projects', screen: 'projects' },
-    { label: 'Training', screen: 'training' },
-    { label: 'Profile', screen: 'profile' },
+    { label: 'Home',     screen: 'dashboard' },
+    { label: 'Projects', screen: 'projects'  },
+    { label: 'Training', screen: 'training'  },
+    { label: 'Profile',  screen: 'profile'   },
   ] : [
-    { label: 'Inventory', screen: 'home' },
-    { label: 'Projects', screen: 'projects' },
-    { label: 'Training', screen: 'training' },
-    { label: 'History', screen: 'history' },
+    { label: 'Home',      screen: 'dashboard' },
+    { label: 'Inventory', screen: 'home'      },
+    { label: 'Projects',  screen: 'projects'  },
+    { label: 'Training',  screen: 'training'  },
+    { label: 'History',   screen: 'history'   },
     ...(session?.role === 'admin' ? [{ label: 'Admin', screen: 'admin' }] : []),
   ]
 
-  const activeScreen = ['home','inspection','results'].includes(screen) ? 'home'
+  const activeScreen =
+    ['home','inspection','results'].includes(screen) ? 'home'
     : ['projects','project-detail'].includes(screen) ? 'projects'
     : screen
 
-  // Show username only for non-admin (admin nav button already identifies them)
   const displayName = session?.role === 'admin' ? '' : session?.username
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 24px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
-        <div style={{ fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 16, letterSpacing: '-0.5px', color: 'var(--accent)' }}>
+        <div onClick={() => setScreen('dashboard')}
+          style={{ fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 16, letterSpacing: '-0.5px', color: 'var(--accent)', cursor: 'pointer' }}>
           Lab<span style={{ color: 'var(--text3)' }}>Stock</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -47,7 +50,7 @@ export default function Layout({ children }) {
           <button className="btn btn-sm" onClick={logout}>Sign out</button>
         </div>
       </header>
-      <main style={{ flex: 1, maxWidth: 900, margin: '0 auto', width: '100%', padding: '32px 20px' }}>
+      <main style={{ flex: 1, maxWidth: 960, margin: '0 auto', width: '100%', padding: '32px 20px' }}>
         {children}
       </main>
     </div>
