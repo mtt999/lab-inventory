@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
@@ -405,7 +405,7 @@ export default function Admin() {
     byRoom[name].push(s)
   })
 
-  const tabs = ['rooms', 'supplies', 'users', 'students', 'import', 'settings']
+  const tabs = ['rooms', 'supplies', 'users', 'students']
 
   return (
     <div>
