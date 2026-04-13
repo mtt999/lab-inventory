@@ -1,3 +1,4 @@
+import FloorPlanPicker from '../components/FloorPlanPicker'
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
@@ -274,55 +275,46 @@ function QtyForm({ form, setForm }) {
 }
 
 // ── Location form ─────────────────────────────────────────────
-function LocationForm({ form, setForm }) {
+function LocationForm({ form, setForm, projectId, projectName, materialId, materialType }) {
+  const [showPicker, setShowPicker] = useState(false)
   const locations = form.locations || []
 
-  function addLocation() {
-    setForm(f => ({ ...f, locations: [...(f.locations || []), { location: '', detail: '' }] }))
+  function handleConfirm(locs) {
+    setForm(f => ({ ...f, locations: locs }))
   }
 
-  function updateLocation(i, field, val) {
-    setForm(f => {
-      const locs = [...(f.locations || [])]
-      locs[i] = { ...locs[i], [field]: val }
-      return { ...f, locations: locs }
-    })
-  }
-
-  function removeLocation(i) {
-    setForm(f => ({ ...f, locations: f.locations.filter((_, idx) => idx !== i) }))
+  function removeLocation(id) {
+    setForm(f => ({ ...f, locations: f.locations.filter(l => l.location_id !== id) }))
   }
 
   return (
     <Section title="4 · Material Location">
-      {locations.map((loc, i) => (
-        <div key={i} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: 14, marginBottom: 10 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text2)' }}>Location {i + 1}</div>
-            <button onClick={() => removeLocation(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: 13, fontWeight: 500 }}>Remove</button>
-          </div>
-          <div className="grid-2">
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label>Area</label>
-              <select value={loc.location || ''} onChange={e => updateLocation(i, 'location', e.target.value)}>
-                <option value="">— Select location —</option>
-                {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </div>
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label>Detail (Pallet/Shelf/Row)</label>
-              <input value={loc.detail || ''} onChange={e => updateLocation(i, 'detail', e.target.value)} placeholder="e.g. P1, S2, Row 3" />
-            </div>
-          </div>
-          {loc.location === 'Other' && (
-            <div className="field" style={{ marginTop: 8, marginBottom: 0 }}>
-              <label>Describe location</label>
-              <input value={loc.other || ''} onChange={e => updateLocation(i, 'other', e.target.value)} placeholder="Describe where the material is stored…" />
-            </div>
-          )}
+      <button className="btn btn-sm btn-primary" type="button" onClick={() => setShowPicker(true)}>
+        🗺️ Open floor plan
+      </button>
+
+      {locations.length > 0 && (
+        <div style={{ marginTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {locations.map((loc, i) => (
+            <span key={i} style={{ background: 'var(--accent-light)', color: 'var(--accent)', borderRadius: 99, padding: '4px 12px', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              📍 {loc.detail || loc.location_id || loc.location}
+              <button onClick={() => removeLocation(loc.location_id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+            </span>
+          ))}
         </div>
-      ))}
-      <button className="btn btn-sm" type="button" onClick={addLocation}>+ Add location</button>
+      )}
+
+      {showPicker && (
+        <FloorPlanPicker
+          projectId={projectId}
+          projectName={projectName}
+          materialId={materialId}
+          materialType={materialType}
+          currentLocations={locations}
+          onConfirm={handleConfirm}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
     </Section>
   )
 }
@@ -472,7 +464,7 @@ function validate(form, toast) {
 }
 
 // ── Material form modal ───────────────────────────────────────
-function MaterialModal({ projectId, material, onClose, onSaved }) {
+function MaterialModal({ projectId, projectName, material, onClose, onSaved }) {
   const { toast } = useAppStore()
   const [form, setForm] = useState(material ? {
     name: material.name || '',
@@ -565,7 +557,7 @@ function MaterialModal({ projectId, material, onClose, onSaved }) {
         <MaterialTypeForm form={form} setForm={setForm} />
         <SourceForm form={form} setForm={setForm} />
         <QtyForm form={form} setForm={setForm} />
-        <LocationForm form={form} setForm={setForm} />
+        <LocationForm form={form} setForm={setForm} projectId={projectId} projectName={projectName} materialId={material?.id} materialType={form.material_type} />
         <SamplingDateForm form={form} setForm={setForm} />
         <PhotosForm form={form} setForm={setForm} materialId={material?.id} />
 
@@ -712,6 +704,7 @@ export default function ProjectMaterials({ project }) {
       {showModal && (
         <MaterialModal
           projectId={project.id}
+          projectName={project.name}
           material={editMaterial}
           onClose={() => { setShowModal(false); setEditMaterial(null) }}
           onSaved={load}
