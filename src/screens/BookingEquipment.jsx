@@ -409,7 +409,7 @@ function BookingCalendar({ session }) {
   useEffect(() => { loadBookings() }, [])
 
   async function loadEquipment() {
-    const { data } = await sb.from('equipment_inventory').select('id, equipment_name, nickname, category, location').eq('is_active', true).order('nickname')
+    const { data } = await sb.from('equipment_inventory').select('id, equipment_name, nickname, category, location').eq('is_active', true).order('category').order('nickname')
     setEquipment(data || [])
     setLoading(false)
   }
@@ -489,7 +489,7 @@ function BookingCalendar({ session }) {
     return !q || [e.equipment_name, e.nickname, e.category, e.location].some(f => f?.toLowerCase().includes(q))
   })
 
-  const categories = [...new Set(equipment.map(e => e.category).filter(Boolean))]
+  const categories = [...new Set(equipment.map(e => e.category).filter(Boolean))].sort()
 
   return (
     <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
