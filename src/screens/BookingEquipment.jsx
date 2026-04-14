@@ -23,6 +23,7 @@ function fmtTime(d) { return new Date(d).toLocaleTimeString('en-US', { hour: '2-
 function fmtDateTime(d) { return `${fmt(d, { month: 'short', day: 'numeric' })} ${fmtTime(d)}` }
 
 const HOURS = Array.from({ length: 24 }, (_, i) => i)
+const HALF_HOURS = Array.from({ length: 48 }, (_, i) => i) // 0=12:00am, 1=12:30am, 2=1:00am...
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
@@ -39,6 +40,7 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
     end_time: booking?.end_time ? new Date(booking.end_time).toISOString().slice(0,16) : (initialSlot?.end || ''),
     notes: booking?.notes || '',
     booked_on_behalf_of: booking?.booked_on_behalf_of || '',
+    purposes: booking?.title ? booking.title.split(', ').filter(p => ['Project','Thesis','Other'].includes(p)) : [],
   })
   const [students, setStudents] = useState([])
   const [saving, setSaving] = useState(false)
@@ -130,8 +132,25 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
           </div>
         )}
 
-        <div className="field"><label>Title / Purpose (optional)</label>
-          <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Asphalt mix design testing" />
+        <div className="field">
+          <label>Purpose (select all that apply)</label>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 6 }}>
+            {['Project', 'Thesis', 'Other'].map(opt => (
+              <label key={opt} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 14, marginBottom: 0 }}>
+                <input type="checkbox"
+                  checked={(form.purposes || []).includes(opt)}
+                  onChange={e => {
+                    const prev = form.purposes || []
+                    setForm(f => ({ ...f,
+                      purposes: e.target.checked ? [...prev, opt] : prev.filter(p => p !== opt),
+                      title: e.target.checked ? [...prev, opt].join(', ') : prev.filter(p => p !== opt).join(', ')
+                    }))
+                  }}
+                  style={{ width: 'auto' }} />
+                {opt}
+              </label>
+            ))}
+          </div>
         </div>
 
         {conflict && (
@@ -159,38 +178,39 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const today = new Date()
 
-  function cellKey(dayIdx, hour) { return dayIdx * 24 + hour }
+  function cellKey(dayIdx, slot) { return dayIdx * 48 + slot }
 
-  function handleMouseDown(dayIdx, hour) {
+  function handleMouseDown(dayIdx, slot) {
     if (!canBook) return
-    setDrag({ startDayIdx: dayIdx, startHour: hour, endDayIdx: dayIdx, endHour: hour })
+    setDrag({ startDayIdx: dayIdx, startSlot: slot, endDayIdx: dayIdx, endSlot: slot })
   }
 
-  function handleMouseEnter(dayIdx, hour) {
+  function handleMouseEnter(dayIdx, slot) {
     if (!drag) return
-    setDrag(d => ({ ...d, endDayIdx: dayIdx, endHour: hour }))
+    setDrag(d => ({ ...d, endDayIdx: dayIdx, endSlot: slot }))
   }
 
   function handleMouseUp() {
     if (!drag) return
-    // Normalize so start is always before end
-    let { startDayIdx, startHour, endDayIdx, endHour } = drag
-    const startCell = cellKey(startDayIdx, startHour)
-    const endCell = cellKey(endDayIdx, endHour)
+    let { startDayIdx, startSlot, endDayIdx, endSlot } = drag
+    const startCell = cellKey(startDayIdx, startSlot)
+    const endCell = cellKey(endDayIdx, endSlot)
     if (startCell > endCell) {
-      [startDayIdx, startHour, endDayIdx, endHour] = [endDayIdx, endHour, startDayIdx, startHour]
+      [startDayIdx, startSlot, endDayIdx, endSlot] = [endDayIdx, endSlot, startDayIdx, startSlot]
     }
-    const start = new Date(days[startDayIdx]); start.setHours(startHour, 0, 0, 0)
-    const end = new Date(days[endDayIdx]); end.setHours(endHour + 1, 0, 0, 0)
+    const startHour = Math.floor(startSlot / 2), startMin = (startSlot % 2) * 30
+    const endHour = Math.floor(endSlot / 2), endMin = (endSlot % 2) * 30
+    const start = new Date(days[startDayIdx]); start.setHours(startHour, startMin, 0, 0)
+    const end = new Date(days[endDayIdx]); end.setHours(endHour, endMin + 30, 0, 0)
     setDrag(null)
     onSlotClick({ start: start.toISOString().slice(0,16), end: end.toISOString().slice(0,16) })
   }
 
-  function isDragHighlighted(dayIdx, hour) {
+  function isDragHighlighted(dayIdx, slot) {
     if (!drag) return false
-    const cur = cellKey(dayIdx, hour)
-    const a = cellKey(drag.startDayIdx, drag.startHour)
-    const b = cellKey(drag.endDayIdx, drag.endHour)
+    const cur = cellKey(dayIdx, slot)
+    const a = cellKey(drag.startDayIdx, drag.startSlot)
+    const b = cellKey(drag.endDayIdx, drag.endSlot)
     return cur >= Math.min(a, b) && cur <= Math.max(a, b)
   }
 
@@ -202,54 +222,60 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
         {/* Header */}
         <div style={{ height: 40, borderBottom: '1px solid var(--border)', background: 'var(--surface)' }} />
         {days.map((day, i) => (
-          <div key={i} style={{ height: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderBottom: '1px solid var(--border)', borderLeft: '1px solid var(--border)', background: sameDay(day, today) ? 'var(--accent-light)' : 'var(--surface)', position: 'sticky', top: 0, zIndex: 10 }}>
+          <div key={i} style={{ height: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderBottom: '1px solid var(--border)', borderLeft: '1px solid var(--border)', background: sameDay(day, today) ? 'var(--accent-light)' : 'var(--surface)', position: 'sticky', top: 0, zIndex: 10, borderBottom: '2px solid var(--border)' }}>
             <div style={{ color: 'var(--text3)', fontFamily: 'var(--mono)', fontSize: 10 }}>{DAYS[day.getDay()]}</div>
             <div style={{ fontWeight: sameDay(day, today) ? 700 : 500, fontSize: 13, color: sameDay(day, today) ? 'var(--accent)' : 'var(--text)' }}>{day.getDate()}</div>
           </div>
         ))}
 
-        {/* Time rows */}
-        {HOURS.map(hour => (
-          <>
-            <div key={`h${hour}`} style={{ height: 48, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', paddingRight: 4, paddingTop: 2, fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', borderTop: '1px solid var(--surface2)' }}>
-              {hour === 0 ? '12a' : hour < 12 ? `${hour}a` : hour === 12 ? '12p' : `${hour-12}p`}
-            </div>
-            {days.map((day, di) => {
-              const highlighted = isDragHighlighted(di, hour)
-              // Only render booking block at its START hour on this day
-              const startingHere = bookings.filter(b => {
-                const s = new Date(b.start_time)
-                return sameDay(s, day) && s.getHours() === hour
-              })
-              return (
-                <div key={`${hour}-${di}`}
-                  style={{ height: 48, borderTop: '1px solid var(--surface2)', borderLeft: '1px solid var(--border)', position: 'relative', background: highlighted ? 'rgba(var(--accent-rgb, 26,93,56), 0.12)' : 'transparent', cursor: canBook ? 'crosshair' : 'default', transition: 'background 0.05s' }}
-                  onMouseDown={() => handleMouseDown(di, hour)}
-                  onMouseEnter={() => handleMouseEnter(di, hour)}>
-                  {startingHere.map(b => {
-                    const startH = new Date(b.start_time)
-                    const endH = new Date(b.end_time)
-                    const dayEnd = new Date(day); dayEnd.setHours(24, 0, 0, 0)
-                    const durationMins = Math.min((endH - startH), (dayEnd - startH)) / 60000
-                    const topOffset = (startH.getMinutes() / 60) * 48
-                    const height = Math.max(22, (durationMins / 60) * 48 - 2)
-                    return (
-                      <div key={b.id}
-                        onClick={e => { e.stopPropagation(); onBookingClick(b) }}
-                        style={{ position: 'absolute', left: 2, right: 2, top: topOffset, height, background: statusBg[b.status], border: `1px solid ${statusColor[b.status]}50`, borderLeft: `3px solid ${statusColor[b.status]}`, borderRadius: 4, padding: '2px 5px', fontSize: 10, overflow: 'hidden', zIndex: 2, cursor: 'pointer' }}>
-                        <div style={{ fontWeight: 600, color: statusColor[b.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {b.booked_on_behalf_of || b.user_name}
+        {/* Half-hour time rows */}
+        {HALF_HOURS.map(slot => {
+          const hour = Math.floor(slot / 2)
+          const isHalf = slot % 2 === 1
+          const label = !isHalf ? (hour === 0 ? '12a' : hour < 12 ? `${hour}a` : hour === 12 ? '12p' : `${hour-12}p`) : ''
+          return (
+            <>
+              <div key={`h${slot}`} style={{ height: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', paddingRight: 4, paddingTop: 1, fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', borderTop: isHalf ? '1px dashed var(--surface2)' : '1px solid var(--border)', background: 'var(--surface)' }}>
+                {label}
+              </div>
+              {days.map((day, di) => {
+                const highlighted = isDragHighlighted(di, slot)
+                // Render bookings starting in this exact slot
+                const startingHere = bookings.filter(b => {
+                  const s = new Date(b.start_time)
+                  const slotHour = Math.floor(slot / 2)
+                  const slotMin = (slot % 2) * 30
+                  return sameDay(s, day) && s.getHours() === slotHour && s.getMinutes() === slotMin
+                })
+                return (
+                  <div key={`${slot}-${di}`}
+                    style={{ height: 24, borderTop: isHalf ? '1px dashed var(--surface2)' : '1px solid var(--border)', borderLeft: '1px solid var(--border)', position: 'relative', background: highlighted ? 'rgba(26,93,56,0.1)' : 'transparent', cursor: canBook ? 'crosshair' : 'default' }}
+                    onMouseDown={() => handleMouseDown(di, slot)}
+                    onMouseEnter={() => handleMouseEnter(di, slot)}>
+                    {startingHere.map(b => {
+                      const startH = new Date(b.start_time)
+                      const endH = new Date(b.end_time)
+                      const dayEnd = new Date(day); dayEnd.setHours(24, 0, 0, 0)
+                      const durationMins = Math.min((endH - startH), (dayEnd - startH)) / 60000
+                      const height = Math.max(22, (durationMins / 30) * 24 - 2)
+                      return (
+                        <div key={b.id}
+                          onClick={e => { e.stopPropagation(); onBookingClick(b) }}
+                          style={{ position: 'absolute', left: 2, right: 2, top: 0, height, background: statusBg[b.status], border: `1px solid ${statusColor[b.status]}50`, borderLeft: `3px solid ${statusColor[b.status]}`, borderRadius: 4, padding: '2px 5px', fontSize: 10, overflow: 'hidden', zIndex: 2, cursor: 'pointer' }}>
+                          <div style={{ fontWeight: 600, color: statusColor[b.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {b.booked_on_behalf_of || b.user_name}
+                          </div>
+                          {height > 30 && b.title && <div style={{ color: statusColor[b.status], opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</div>}
+                          {height > 44 && <div style={{ color: statusColor[b.status], opacity: 0.6, fontSize: 9 }}>{fmtTime(b.start_time)}–{fmtTime(b.end_time)}</div>}
                         </div>
-                        {height > 30 && b.title && <div style={{ color: statusColor[b.status], opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</div>}
-                        {height > 46 && <div style={{ color: statusColor[b.status], opacity: 0.6, fontSize: 9 }}>{fmtTime(b.start_time)}–{fmtTime(b.end_time)}</div>}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </>
-        ))}
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </>
+          )
+        })}
       </div>
     </div>
   )
@@ -551,16 +577,11 @@ function BookingCalendar({ session }) {
           ))}
         </div>
 
-        {selectedEq.length === 0 ? (
-          <div className="empty-state" style={{ marginTop: 40 }}>
-            <div className="empty-icon">📅</div>
-            <div>Select equipment from the left to view and book</div>
-          </div>
-        ) : calView === 'week' ? (
+        {calView === 'week' ? (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
             {selectedEq.length === 0 && (
-              <div style={{ padding: '10px 16px', background: '#fef3c7', borderBottom: '1px solid #f0d070', fontSize: 12, color: '#92400e' }}>
-                💡 Select equipment from the left to enable drag-to-book
+              <div style={{ padding: '8px 14px', background: '#fef3c7', borderBottom: '1px solid #f0d070', fontSize: 12, color: '#92400e' }}>
+                💡 Select equipment on the left to enable drag-to-book
               </div>
             )}
             <WeekView weekStart={weekStart} bookings={bookings} onSlotClick={handleSlotClick} onBookingClick={b => setDetailBooking(b)} canBook={selectedEq.length > 0} />
@@ -568,8 +589,8 @@ function BookingCalendar({ session }) {
         ) : (
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
             {selectedEq.length === 0 && (
-              <div style={{ padding: '10px 16px', background: '#fef3c7', borderBottom: '1px solid #f0d070', fontSize: 12, color: '#92400e' }}>
-                💡 Select equipment from the left to enable booking
+              <div style={{ padding: '8px 14px', background: '#fef3c7', borderBottom: '1px solid #f0d070', fontSize: 12, color: '#92400e' }}>
+                💡 Select equipment on the left to enable booking
               </div>
             )}
             <MonthView monthDate={monthDate} bookings={bookings} onDayClick={handleDayClick} onBookingClick={b => setDetailBooking(b)} />
