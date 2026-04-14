@@ -35,9 +35,8 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
   const [form, setForm] = useState({
     equipment_id: booking?.equipment_id || selectedEquipment?.id || '',
     title: booking?.title || '',
-    start_time: booking?.start_time ? new Date(booking.start_time).toISOString().slice(0,16) : '',
-    end_time: booking?.end_time ? new Date(booking.end_time).toISOString().slice(0,16) : '',
-    duration: booking ? Math.round((new Date(booking.end_time) - new Date(booking.start_time)) / 3600000) : 1,
+    start_time: booking?.start_time ? new Date(booking.start_time).toISOString().slice(0,16) : (initialSlot?.start || ''),
+    end_time: booking?.end_time ? new Date(booking.end_time).toISOString().slice(0,16) : (initialSlot?.end || ''),
     notes: booking?.notes || '',
     booked_on_behalf_of: booking?.booked_on_behalf_of || '',
   })
@@ -65,8 +64,7 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
 
   async function save() {
     if (!form.equipment_id) { toast('Select equipment.'); return }
-    if (!form.start_time || !form.end_time) { toast('Set start and end time.'); return }
-    if (new Date(form.start_time) >= new Date(form.end_time)) { toast('End time must be after start.'); return }
+    if (!form.start_time || !form.end_time) { toast('Please drag on the calendar to select a time slot.'); return }
     if (conflict) { toast('This time slot conflicts with an existing booking.'); return }
     setSaving(true)
     // Check if equipment requires approval for this user
@@ -120,48 +118,20 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
           </div>
         )}
 
+        {/* Read-only time info from drag selection */}
+        {form.start_time && form.end_time && (
+          <div style={{ background: 'var(--accent-light)', border: '1px solid var(--accent)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
+            <div style={{ fontWeight: 600, color: 'var(--accent)', marginBottom: 4 }}>📅 Selected time</div>
+            <div style={{ color: 'var(--text2)' }}>
+              <span style={{ fontFamily: 'var(--mono)' }}>{fmtDateTime(form.start_time)}</span>
+              <span style={{ margin: '0 8px', color: 'var(--text3)' }}>→</span>
+              <span style={{ fontFamily: 'var(--mono)' }}>{fmtDateTime(form.end_time)}</span>
+            </div>
+          </div>
+        )}
+
         <div className="field"><label>Title / Purpose (optional)</label>
           <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Asphalt mix design testing" />
-        </div>
-
-        <div className="grid-2">
-          <div className="field"><label>Date *</label>
-            <input type="date" value={form.start_time ? form.start_time.split('T')[0] : ''} onChange={e => {
-              const date = e.target.value
-              const time = form.start_time ? form.start_time.split('T')[1] : '09:00'
-              const newStart = `${date}T${time}`
-              const dur = form.duration || 1
-              const end = new Date(new Date(newStart).getTime() + dur * 3600000)
-              setForm(f => ({ ...f, start_time: newStart, end_time: end.toISOString().slice(0,16) }))
-            }} />
-          </div>
-          <div className="field"><label>Start Time *</label>
-            <input type="time" value={form.start_time ? form.start_time.split('T')[1] : ''} onChange={e => {
-              const date = form.start_time ? form.start_time.split('T')[0] : new Date().toISOString().split('T')[0]
-              const newStart = `${date}T${e.target.value}`
-              const dur = form.duration || 1
-              const end = new Date(new Date(newStart).getTime() + dur * 3600000)
-              setForm(f => ({ ...f, start_time: newStart, end_time: end.toISOString().slice(0,16) }))
-            }} />
-          </div>
-        </div>
-        <div className="field"><label>Duration</label>
-          <select value={form.duration || 1} onChange={e => {
-            const dur = parseFloat(e.target.value)
-            const end = form.start_time ? new Date(new Date(form.start_time).getTime() + dur * 3600000).toISOString().slice(0,16) : ''
-            setForm(f => ({ ...f, duration: dur, end_time: end }))
-          }}>
-            <option value={0.5}>30 minutes</option>
-            <option value={1}>1 hour</option>
-            <option value={2}>2 hours</option>
-            <option value={3}>3 hours</option>
-            <option value={4}>4 hours (half day)</option>
-            <option value={8}>8 hours (full day)</option>
-            <option value={24}>Full day (24h)</option>
-            <option value={48}>2 days</option>
-            <option value={72}>3 days</option>
-            <option value={168}>1 week</option>
-          </select>
         </div>
 
         {conflict && (
