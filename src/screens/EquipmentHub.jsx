@@ -248,35 +248,35 @@ function EquipmentInfo({ equipment, session }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text3)', fontSize: 13 }}>
             <span style={{ fontSize: 20 }}>🔒</span> Available after completing equipment training or with temporary access from ICT-RE.
           </div>
-        ) :
-
-        {showVideoForm && (
-          <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 14 }}>
-            <div className="field"><label>Title *</label><input value={videoForm.title} onChange={e => setVideoForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. How to operate the Gyratory Compactor" autoFocus /></div>
-            <div className="field"><label>Video URL (YouTube, Vimeo, or direct link)</label><input value={videoForm.video_url} onChange={e => setVideoForm(f => ({ ...f, video_url: e.target.value }))} placeholder="https://youtube.com/watch?v=…" /></div>
-            <div className="field"><label>Description</label><textarea rows={2} value={videoForm.description} onChange={e => setVideoForm(f => ({ ...f, description: e.target.value }))} style={{ resize: 'vertical' }} /></div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button className="btn btn-primary btn-sm" onClick={saveVideo}>Save</button>
-              <button className="btn btn-sm" onClick={() => setShowVideoForm(false)}>Cancel</button>
-            </div>
+        ) : (
+          <div>
+            {showVideoForm && (
+              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 14 }}>
+                <div className="field"><label>Title *</label><input value={videoForm.title} onChange={e => setVideoForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. How to operate the Gyratory Compactor" autoFocus /></div>
+                <div className="field"><label>Video URL (YouTube, Vimeo, or direct link)</label><input value={videoForm.video_url} onChange={e => setVideoForm(f => ({ ...f, video_url: e.target.value }))} placeholder="https://youtube.com/watch?v=…" /></div>
+                <div className="field"><label>Description</label><textarea rows={2} value={videoForm.description} onChange={e => setVideoForm(f => ({ ...f, description: e.target.value }))} style={{ resize: 'vertical' }} /></div>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button className="btn btn-primary btn-sm" onClick={saveVideo}>Save</button>
+                  <button className="btn btn-sm" onClick={() => setShowVideoForm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {videos.length === 0
+              ? <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No training videos yet.</div>
+              : videos.map(v => (
+                <div key={v.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--surface2)' }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 8, background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>▶️</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{v.title}</div>
+                    {v.description && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{v.description}</div>}
+                    {v.video_url && <a href={v.video_url} target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--accent)', marginTop: 4, display: 'block' }}>▶ Watch video</a>}
+                  </div>
+                  {canEdit(session) && <button className="btn btn-sm btn-danger" style={{ padding: '3px 8px' }} onClick={() => deleteVideo(v.id)}>✕</button>}
+                </div>
+              ))
+            }
           </div>
         )}
-
-        {videos.length === 0
-          ? <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No training videos yet.</div>
-          : videos.map(v => (
-            <div key={v.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--surface2)' }}>
-              <div style={{ width: 36, height: 36, borderRadius: 8, background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>▶️</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 600, fontSize: 14 }}>{v.title}</div>
-                {v.description && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{v.description}</div>}
-                {v.video_url && <a href={v.video_url} target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--accent)', marginTop: 4, display: 'block' }}>▶ Watch video</a>}
-              </div>
-              {canEdit(session) && <button className="btn btn-sm btn-danger" style={{ padding: '3px 8px' }} onClick={() => deleteVideo(v.id)}>✕</button>}
-            </div>
-          ))
-        }
-        }
       </div>
 
       {/* ── SOP ── */}
@@ -292,8 +292,8 @@ function EquipmentInfo({ equipment, session }) {
             <span style={{ fontSize: 20 }}>🔒</span> Available after completing equipment training or with temporary access from ICT-RE.
           </div>
         ) : (
-
-        {showSopForm && (
+          <div>
+          {showSopForm && (
           <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 14 }}>
             <div className="field"><label>SOP Title</label><input value={sopForm.title} onChange={e => setSopForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Gyratory Compactor Operation Procedure" /></div>
 
