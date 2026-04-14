@@ -23,6 +23,7 @@ const LOCATIONS = [
 function canEdit(session) {
   return session?.role === 'admin' || session?.role === 'user'
 }
+function isAdmin(session) { return session?.role === 'admin' }
 
 
 // ── Equipment Modal ───────────────────────────────────────────
@@ -448,6 +449,15 @@ function MaintenanceDue({ session }) {
       sb.from('equipment_inventory').select('*').eq('is_active', true).not('max_usage_hours', 'is', null),
       sb.from('equipment_bookings').select('equipment_id, start_time, end_time').eq('status', 'confirmed'),
     ])
+    // For staff (non-admin), also load equipment assigned to them
+    if (!isAdmin(session)) {
+      const { data: assigned } = await sb.from('equipment_inventory').select('*').eq('is_active', true).eq('assigned_to', session.username)
+      if (assigned?.length) {
+        const assignedIds = new Set(assigned.map(a => a.id))
+        byDate?.push(...assigned.filter(a => !byDate?.find(b => b.id === a.id)))
+        byUsage?.push(...assigned.filter(a => !byUsage?.find(b => b.id === a.id)))
+      }
+    }
     // Calculate usage hours per equipment
     const usageHrs = {}
     ;(bookings || []).forEach(b => {
@@ -661,15 +671,19 @@ function MaintenanceRecords({ session }) {
   const [usageMap, setUsageMap] = useState({}) // equipment_id → total hours from bookings
   const [editHours, setEditHours] = useState(null) // { id, max_usage_hours, usage_hours_since_maintenance }
   const [saving, setSaving] = useState(false)
+  const [staff, setStaff] = useState([])
+  const [assignModal, setAssignModal] = useState(null) // { id, name, assigned_to }
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
-    const [{ data: eq }, { data: bookings }] = await Promise.all([
-      sb.from('equipment_inventory').select('id, equipment_name, nickname, location, category, last_maintenance_date, max_usage_hours, usage_hours_since_maintenance, condition').eq('is_active', true).order('category').order('equipment_name'),
+    const [{ data: eq }, { data: bookings }, { data: staffData }] = await Promise.all([
+      sb.from('equipment_inventory').select('id, equipment_name, nickname, location, category, last_maintenance_date, max_usage_hours, usage_hours_since_maintenance, condition, assigned_to').eq('is_active', true).order('category').order('equipment_name'),
       sb.from('equipment_bookings').select('equipment_id, start_time, end_time, status').eq('status', 'confirmed'),
+      sb.from('users').select('id, name').in('role', ['user', 'admin']).eq('is_active', true).order('name'),
     ])
+    setStaff(staffData || [])
 
     // Calculate total usage hours per equipment from bookings
     const usage = {}
@@ -681,6 +695,16 @@ function MaintenanceRecords({ session }) {
     setItems(eq || [])
     setUsageMap(usage)
     setLoading(false)
+  }
+
+  async function assignMaintenance() {
+    if (!assignModal) return
+    setSaving(true)
+    await sb.from('equipment_inventory').update({ assigned_to: assignModal.assigned_to || null, updated_at: new Date().toISOString() }).eq('id', assignModal.id)
+    toast('Maintenance assigned ✓')
+    setSaving(false)
+    setAssignModal(null)
+    load()
   }
 
   async function saveMaxHours() {
@@ -771,6 +795,7 @@ function MaintenanceRecords({ session }) {
                     <th>Since Last Maint.</th>
                     <th>Max Threshold</th>
                     <th>Usage Bar</th>
+                    <th>Assigned To</th>
                     <th>Last Maintenance</th>
                     {canEdit(session) && <th>Actions</th>}
                   </tr>
@@ -801,6 +826,11 @@ function MaintenanceRecords({ session }) {
                             </div>
                           ) : <span style={{ color: 'var(--text3)', fontSize: 12 }}>No threshold set</span>}
                         </td>
+                        <td>
+                          {item.assigned_to
+                            ? <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{item.assigned_to}</span>
+                            : <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>}
+                        </td>
                         <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.last_maintenance_date || '—'}</td>
                         {canEdit(session) && (
                           <td>
@@ -808,6 +838,10 @@ function MaintenanceRecords({ session }) {
                               <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
                                 onClick={() => setEditHours({ id: item.id, name: item.nickname || item.equipment_name, max_usage_hours: item.max_usage_hours || '', usage_hours_since_maintenance: item.usage_hours_since_maintenance || 0 })}>
                                 ⚙️ Set
+                              </button>
+                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
+                                onClick={() => setAssignModal({ id: item.id, name: item.nickname || item.equipment_name, assigned_to: item.assigned_to || '' })}>
+                                👤 Assign
                               </button>
                               <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
                                 onClick={() => resetUsage(item.id)}>
@@ -824,6 +858,28 @@ function MaintenanceRecords({ session }) {
             </div>
           </div>
         ))
+      )}
+
+      {/* Assign maintenance modal */}
+      {assignModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 28, maxWidth: 380, width: '100%', border: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Assign maintenance</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>{assignModal.name}</div>
+            <div className="field">
+              <label>Assign to staff member</label>
+              <select value={assignModal.assigned_to} onChange={e => setAssignModal(f => ({ ...f, assigned_to: e.target.value }))}>
+                <option value="">— Unassigned —</option>
+                {staff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>The assigned staff member will see this equipment in their Maintenance Due tab.</div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-primary" onClick={assignMaintenance} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+              <button className="btn" onClick={() => setAssignModal(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Edit threshold modal */}
