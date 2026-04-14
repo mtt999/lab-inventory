@@ -13,6 +13,7 @@ import TrainingRecords from './screens/TrainingRecords'
 import Profile from './screens/Profile'
 import EquipmentInventory from './screens/EquipmentInventory'
 import EquipmentHub from './screens/EquipmentHub'
+import BookingEquipment from './screens/BookingEquipment'
 import Toast from './components/Toast'
 
 export default function App() {
@@ -31,7 +32,7 @@ export default function App() {
   // Redirect students away from restricted screens
   useEffect(() => {
     if (session?.role === 'student') {
-      const allowed = ['dashboard', 'projects', 'project-detail', 'training', 'profile', 'equipmenthub']
+      const allowed = ['dashboard', 'projects', 'project-detail', 'training', 'profile', 'equipmenthub', 'booking']
       if (!allowed.includes(screen)) setScreen('dashboard')
     }
   }, [session, screen])
@@ -57,6 +58,7 @@ export default function App() {
     profile: <Profile />,
     equipment: <EquipmentInventory />,
     equipmenthub: <EquipmentHub />,
+    booking: <BookingEquipment />,
   }
 
   return (

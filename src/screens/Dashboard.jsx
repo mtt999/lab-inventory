@@ -10,9 +10,10 @@ function getModules(role) {
     { key: 'training',  screen: 'training', label: 'Training Records',  sub: 'Certs, equipment & alarm',      icon: '🎓', bg: '#e0f2fe', color: '#0369a1' },
     { key: 'equipment', screen: 'equipment',    label: 'Equipment Inventory', sub: 'Lab equipment tracking',        icon: '🔧', bg: '#fef3c7', color: '#92400e' },
     { key: 'equipmenthub', screen: 'equipmenthub', label: 'Equipment',       sub: 'Info, SOP & standards',         icon: '📚', bg: '#e8f2ee', color: '#1e4d39' },
+    { key: 'booking',      screen: 'booking',      label: 'Booking Equipment', sub: 'Reserve lab equipment',         icon: '📅', bg: '#e0f2fe', color: '#0369a1' },
     { key: 'profile',   screen: 'profile',  label: 'Profile',           sub: 'Your info & settings',          icon: '👤', bg: '#fdf0ed', color: '#c84b2f' },
   ]
-  if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub'].includes(m.key))
+  if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub','booking'].includes(m.key))
   return all
 }
 
