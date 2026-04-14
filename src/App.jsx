@@ -13,6 +13,7 @@ import Admin from './screens/Admin'
 import TrainingRecords from './screens/TrainingRecords'
 import Profile from './screens/Profile'
 import EquipmentInventory from './screens/EquipmentInventory'
+import EquipmentHub from './screens/EquipmentHub'
 import Toast from './components/Toast'
 
 export default function App() {
@@ -57,6 +58,7 @@ export default function App() {
     training: <TrainingRecords />,
     profile: <Profile />,
     equipment: <EquipmentInventory />,
+    equipmenthub: <EquipmentHub />,
   }
 
   return (

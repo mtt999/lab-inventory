@@ -8,7 +8,8 @@ function getModules(role) {
     { key: 'supply',    screen: 'home',     label: 'Supply Inventory',  sub: 'Weekly inspection & export',   icon: '📦', bg: '#e8f2ee', color: '#2a6049' },
     { key: 'projects',  screen: 'projects', label: 'Project Inventory', sub: 'Materials, storage & database', icon: '🧪', bg: '#f3eeff', color: '#7c4dbd' },
     { key: 'training',  screen: 'training', label: 'Training Records',  sub: 'Certs, equipment & alarm',      icon: '🎓', bg: '#e0f2fe', color: '#0369a1' },
-    { key: 'equipment', screen: 'equipment',label: 'Equipment Inventory',sub: 'Lab equipment tracking',       icon: '🔧', bg: '#fef3c7', color: '#92400e' },
+    { key: 'equipment', screen: 'equipment',    label: 'Equipment Inventory', sub: 'Lab equipment tracking',        icon: '🔧', bg: '#fef3c7', color: '#92400e' },
+    { key: 'equipmenthub', screen: 'equipmenthub', label: 'Equipment Hub',       sub: 'Info, SOP & standards',         icon: '📚', bg: '#e8f2ee', color: '#1e4d39' },
     { key: 'profile',   screen: 'profile',  label: 'Profile',           sub: 'Your info & settings',          icon: '👤', bg: '#fdf0ed', color: '#c84b2f' },
   ]
   if (role === 'student') return all.filter(m => ['projects','training','profile'].includes(m.key))
