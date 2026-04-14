@@ -367,10 +367,90 @@ function EquipmentInfo({ equipment, session }) {
       {canEdit(session) && (
         <TemporaryAccessPanel equipment={equipment} session={session} />
       )}
+
+      {/* ── SOP Notes (visible to all with access) ── */}
+      {!restrictedContent && (
+        <SOPNotes equipment={equipment} session={session} />
+      )}
     </div>
   )
 }
 
+// ── SOP Notes ────────────────────────────────────────────────
+function SOPNotes({ equipment, session }) {
+  const { toast } = useAppStore()
+  const [notes, setNotes] = useState([])
+  const [newNote, setNewNote] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { load() }, [equipment.id])
+
+  async function load() {
+    setLoading(true)
+    const { data } = await sb.from('equipment_sop_notes')
+      .select('*').eq('equipment_id', equipment.id)
+      .order('created_at', { ascending: false })
+    setNotes(data || [])
+    setLoading(false)
+  }
+
+  async function submitNote() {
+    if (!newNote.trim()) return
+    setSaving(true)
+    await sb.from('equipment_sop_notes').insert({
+      equipment_id: equipment.id,
+      user_id: session.userId,
+      user_name: session.username,
+      note: newNote.trim(),
+    })
+    setNewNote(''); toast('Note submitted.'); setSaving(false); load()
+  }
+
+  async function deleteNote(id) {
+    if (!confirm('Delete this note?')) return
+    await sb.from('equipment_sop_notes').delete().eq('id', id)
+    load(); toast('Note deleted.')
+  }
+
+  return (
+    <div className="card">
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>💬 SOP Notes & Feedback</div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>
+        Leave comments about SOP changes, step clarifications, or suggestions for improvement.
+      </div>
+      <textarea value={newNote} onChange={e => setNewNote(e.target.value)}
+        placeholder="e.g. Step 3 needs clarification — the temperature should be checked before starting..."
+        rows={3} style={{ width: '100%', resize: 'vertical', marginBottom: 8 }} />
+      <button className="btn btn-sm btn-primary" onClick={submitNote} disabled={saving || !newNote.trim()} style={{ marginBottom: 20 }}>
+        {saving ? 'Submitting…' : 'Submit note'}
+      </button>
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 16 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+      ) : notes.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No notes yet.</div>
+      ) : notes.map(n => (
+        <div key={n.id} style={{ padding: '12px 0', borderBottom: '1px solid var(--surface2)', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          <div style={{ width: 34, height: 34, borderRadius: '50%', background: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 600, color: 'var(--accent)', flexShrink: 0 }}>
+            {(n.user_name || 'U')[0].toUpperCase()}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontWeight: 600, fontSize: 13 }}>{n.user_name || 'Unknown'}</span>
+              <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                {new Date(n.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>{n.note}</div>
+          </div>
+          {(canEdit(session) || session?.userId === n.user_id) && (
+            <button onClick={() => deleteNote(n.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: 14, padding: '0 4px', flexShrink: 0 }}>✕</button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
 
 // ── Temporary Access Panel ────────────────────────────────────
 function TemporaryAccessPanel({ equipment, session }) {
