@@ -524,7 +524,10 @@ function BookingCalendar({ session }) {
                   {e.location && <div style={{ fontSize: 10, color: 'var(--text3)' }}>{e.location}</div>}
                 </div>
               </div>
-            ))
+            ))}
+                </div>
+              )
+            })
           }
         </div>
       </div>
