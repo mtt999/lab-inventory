@@ -183,19 +183,9 @@ function EquipmentInfo({ equipment, session }) {
 
   if (loading) return <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
 
-  // Access blocked for students without training or temp access
-  if (access === false) {
-    return (
-      <div className="card" style={{ textAlign: 'center', padding: 32 }}>
-        <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
-        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Access Restricted</div>
-        <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
-          SOP, videos, and documents for <strong>{equipment.nickname || equipment.equipment_name}</strong> are only available to students who have completed training or have been granted temporary access.
-        </div>
-        <div style={{ fontSize: 13, color: 'var(--text3)' }}>Contact an ICT-RE to request access.</div>
-      </div>
-    )
-  }
+  // access === false means student has no training and no temp access
+  // They can still see basic info and standards, but not videos/SOP/docs
+  const restrictedContent = access === false
 
   const steps = sop?.steps || []
 
@@ -254,6 +244,11 @@ function EquipmentInfo({ equipment, session }) {
           <div style={{ fontWeight: 600, fontSize: 15 }}>🎬 Training Videos</div>
           {canEdit(session) && <button className="btn btn-sm btn-primary" onClick={() => setShowVideoForm(true)}>+ Add video</button>}
         </div>
+        {restrictedContent ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text3)', fontSize: 13 }}>
+            <span style={{ fontSize: 20 }}>🔒</span> Available after completing equipment training or with temporary access from ICT-RE.
+          </div>
+        ) :
 
         {showVideoForm && (
           <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 14 }}>
@@ -281,6 +276,7 @@ function EquipmentInfo({ equipment, session }) {
             </div>
           ))
         }
+        }
       </div>
 
       {/* ── SOP ── */}
@@ -291,6 +287,11 @@ function EquipmentInfo({ equipment, session }) {
             {sop ? '✏️ Edit SOP' : '+ Add SOP'}
           </button>}
         </div>
+        {restrictedContent ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', color: 'var(--text3)', fontSize: 13 }}>
+            <span style={{ fontSize: 20 }}>🔒</span> Available after completing equipment training or with temporary access from ICT-RE.
+          </div>
+        ) : (
 
         {showSopForm && (
           <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 14 }}>

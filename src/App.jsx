@@ -32,7 +32,7 @@ export default function App() {
   // Redirect students away from restricted screens
   useEffect(() => {
     if (session?.role === 'student') {
-      const allowed = ['dashboard', 'projects', 'project-detail', 'training', 'profile']
+      const allowed = ['dashboard', 'projects', 'project-detail', 'training', 'profile', 'equipmenthub']
       if (!allowed.includes(screen)) setScreen('dashboard')
     }
   }, [session, screen])
