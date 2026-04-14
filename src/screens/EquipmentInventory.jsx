@@ -436,13 +436,32 @@ function MaintenanceDue({ session }) {
   const [logModal, setLogModal] = useState(null)
   const [logDate, setLogDate] = useState(new Date().toISOString().split('T')[0])
   const [logNotes, setLogNotes] = useState('')
+  const [usageHours, setUsageHours] = useState({})
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
-    const { data } = await sb.from('equipment_inventory').select('*').eq('is_active', true).not('next_maintenance_date', 'is', null).order('next_maintenance_date')
-    setItems(data || [])
+    // Load equipment with maintenance schedules OR usage thresholds
+    const [{ data: byDate }, { data: byUsage }, { data: bookings }] = await Promise.all([
+      sb.from('equipment_inventory').select('*').eq('is_active', true).not('next_maintenance_date', 'is', null).order('next_maintenance_date'),
+      sb.from('equipment_inventory').select('*').eq('is_active', true).not('max_usage_hours', 'is', null),
+      sb.from('equipment_bookings').select('equipment_id, start_time, end_time').eq('status', 'confirmed'),
+    ])
+    // Calculate usage hours per equipment
+    const usageHrs = {}
+    ;(bookings || []).forEach(b => {
+      const hrs = (new Date(b.end_time) - new Date(b.start_time)) / 3600000
+      usageHrs[b.equipment_id] = (usageHrs[b.equipment_id] || 0) + hrs
+    })
+    setUsageHours(usageHrs)
+    // Merge: items from both queries (deduplicated)
+    const allIds = new Set()
+    const merged = []
+    for (const i of [...(byDate || []), ...(byUsage || [])]) {
+      if (!allIds.has(i.id)) { allIds.add(i.id); merged.push(i) }
+    }
+    setItems(merged)
     setLoading(false)
   }
 
@@ -453,6 +472,13 @@ function MaintenanceDue({ session }) {
 
   function getStatus(item) {
     const days = getDaysUntil(item.next_maintenance_date)
+    // Check usage-based threshold
+    if (item.max_usage_hours) {
+      const hrs = usageHours[item.id] || 0
+      const pct = (hrs / item.max_usage_hours) * 100
+      if (pct >= 100) return { label: `Usage exceeded (${Math.round(hrs)}/${item.max_usage_hours}h)`, color: '#a32d2d', bg: '#fcebeb', priority: 0 }
+      if (pct >= 80) return { label: `Usage ${Math.round(pct)}% (${Math.round(hrs)}/${item.max_usage_hours}h)`, color: '#92400e', bg: '#fef3c7', priority: 1 }
+    }
     if (days === null) return null
     if (days < 0) return { label: 'Overdue', color: '#a32d2d', bg: '#fcebeb', priority: 0 }
     if (days <= 30) return { label: `Due in ${days}d`, color: '#92400e', bg: '#fef3c7', priority: 1 }
@@ -624,6 +650,214 @@ function EquipmentSettings({ session }) {
   )
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// TAB — MAINTENANCE RECORDS (admin/staff only)
+// ══════════════════════════════════════════════════════════════
+function MaintenanceRecords({ session }) {
+  const { toast } = useAppStore()
+  const [items, setItems] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [usageMap, setUsageMap] = useState({}) // equipment_id → total hours from bookings
+  const [editHours, setEditHours] = useState(null) // { id, max_usage_hours, usage_hours_since_maintenance }
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const [{ data: eq }, { data: bookings }] = await Promise.all([
+      sb.from('equipment_inventory').select('id, equipment_name, nickname, location, category, last_maintenance_date, max_usage_hours, usage_hours_since_maintenance, condition').eq('is_active', true).order('category').order('equipment_name'),
+      sb.from('equipment_bookings').select('equipment_id, start_time, end_time, status').eq('status', 'confirmed'),
+    ])
+
+    // Calculate total usage hours per equipment from bookings
+    const usage = {}
+    ;(bookings || []).forEach(b => {
+      const hrs = (new Date(b.end_time) - new Date(b.start_time)) / 3600000
+      usage[b.equipment_id] = (usage[b.equipment_id] || 0) + hrs
+    })
+
+    setItems(eq || [])
+    setUsageMap(usage)
+    setLoading(false)
+  }
+
+  async function saveMaxHours() {
+    if (!editHours) return
+    setSaving(true)
+    await sb.from('equipment_inventory').update({
+      max_usage_hours: editHours.max_usage_hours || null,
+      usage_hours_since_maintenance: editHours.usage_hours_since_maintenance || 0,
+      updated_at: new Date().toISOString(),
+    }).eq('id', editHours.id)
+    toast('Usage threshold saved ✓')
+    setSaving(false)
+    setEditHours(null)
+    load()
+  }
+
+  async function resetUsage(id) {
+    if (!confirm('Reset usage hours to 0 for this equipment? (Do this after performing maintenance)')) return
+    await sb.from('equipment_inventory').update({ usage_hours_since_maintenance: 0, last_maintenance_date: new Date().toISOString().split('T')[0], updated_at: new Date().toISOString() }).eq('id', id)
+    toast('Usage reset ✓'); load()
+  }
+
+  function getUsageStatus(item, totalHrs) {
+    const max = item.max_usage_hours
+    if (!max) return null
+    const pct = (totalHrs / max) * 100
+    if (pct >= 100) return { label: 'Exceeded', color: '#a32d2d', bg: '#fcebeb', pct: 100 }
+    if (pct >= 80) return { label: `${Math.round(pct)}%`, color: '#92400e', bg: '#fef3c7', pct }
+    return { label: `${Math.round(pct)}%`, color: '#1e4d39', bg: '#e8f2ee', pct }
+  }
+
+  // Group by category
+  const grouped = {}
+  items.forEach(i => {
+    const cat = i.category || 'Uncategorized'
+    if (!grouped[cat]) grouped[cat] = []
+    grouped[cat].push(i)
+  })
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
+        Tracks equipment usage hours based on confirmed bookings. Admin can set a maximum usage threshold — when exceeded, the equipment appears in the Maintenance Due tab.
+      </div>
+
+      {/* Summary cards */}
+      {(() => {
+        const overLimit = items.filter(i => {
+          const hrs = usageMap[i.id] || 0
+          return i.max_usage_hours && hrs >= i.max_usage_hours
+        })
+        const nearLimit = items.filter(i => {
+          const hrs = usageMap[i.id] || 0
+          const pct = i.max_usage_hours ? (hrs / i.max_usage_hours) * 100 : 0
+          return pct >= 80 && pct < 100
+        })
+        return overLimit.length + nearLimit.length > 0 ? (
+          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+            {overLimit.length > 0 && (
+              <div style={{ background: '#fcebeb', border: '1px solid #f09595', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: '#a32d2d' }}>
+                ⚠️ <strong>{overLimit.length}</strong> equipment exceeded max usage hours
+              </div>
+            )}
+            {nearLimit.length > 0 && (
+              <div style={{ background: '#fef3c7', border: '1px solid #f0d070', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: '#92400e' }}>
+                🔔 <strong>{nearLimit.length}</strong> equipment approaching limit (≥80%)
+              </div>
+            )}
+          </div>
+        ) : null
+      })()}
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+      ) : (
+        Object.entries(grouped).map(([cat, catItems]) => (
+          <div key={cat} style={{ marginBottom: 28 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '6px 0', borderBottom: '1px solid var(--border)', marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
+              <span>{cat}</span><span style={{ fontWeight: 400 }}>{catItems.length} items</span>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ fontSize: 13 }}>
+                <thead>
+                  <tr>
+                    <th>Equipment</th>
+                    <th>Location</th>
+                    <th>Total Usage (hrs)</th>
+                    <th>Since Last Maint.</th>
+                    <th>Max Threshold</th>
+                    <th>Usage Bar</th>
+                    <th>Last Maintenance</th>
+                    {canEdit(session) && <th>Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {catItems.map(item => {
+                    const totalHrs = Math.round((usageMap[item.id] || 0) * 10) / 10
+                    const sinceHrs = Math.round((item.usage_hours_since_maintenance || 0) * 10) / 10
+                    const status = getUsageStatus(item, totalHrs)
+                    return (
+                      <tr key={item.id}>
+                        <td style={{ fontWeight: 500 }}>{item.nickname || item.equipment_name}</td>
+                        <td style={{ color: 'var(--text2)' }}>{item.location || '—'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--accent)' }}>{totalHrs}h</td>
+                        <td style={{ fontFamily: 'var(--mono)' }}>{sinceHrs}h</td>
+                        <td style={{ fontFamily: 'var(--mono)' }}>
+                          {item.max_usage_hours ? `${item.max_usage_hours}h` : <span style={{ color: 'var(--text3)' }}>—</span>}
+                        </td>
+                        <td style={{ minWidth: 120 }}>
+                          {status ? (
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                                <span style={{ fontSize: 11, color: status.color, fontWeight: 600 }}>{status.label}</span>
+                              </div>
+                              <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${Math.min(100, status.pct)}%`, background: status.color, borderRadius: 99, transition: 'width 0.3s' }} />
+                              </div>
+                            </div>
+                          ) : <span style={{ color: 'var(--text3)', fontSize: 12 }}>No threshold set</span>}
+                        </td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.last_maintenance_date || '—'}</td>
+                        {canEdit(session) && (
+                          <td>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
+                                onClick={() => setEditHours({ id: item.id, name: item.nickname || item.equipment_name, max_usage_hours: item.max_usage_hours || '', usage_hours_since_maintenance: item.usage_hours_since_maintenance || 0 })}>
+                                ⚙️ Set
+                              </button>
+                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
+                                onClick={() => resetUsage(item.id)}>
+                                ↺ Reset
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Edit threshold modal */}
+      {editHours && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 28, maxWidth: 400, width: '100%', border: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>Set usage threshold</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>{editHours.name}</div>
+            <div className="field">
+              <label>Maximum usage hours before maintenance</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="number" value={editHours.max_usage_hours} onChange={e => setEditHours(f => ({ ...f, max_usage_hours: e.target.value }))} placeholder="e.g. 100" style={{ width: 120 }} />
+                <span style={{ fontSize: 13, color: 'var(--text3)' }}>hours</span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>When total booking hours reach this limit, equipment will appear in Maintenance Due tab.</div>
+            </div>
+            <div className="field">
+              <label>Current hours since last maintenance</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="number" value={editHours.usage_hours_since_maintenance} onChange={e => setEditHours(f => ({ ...f, usage_hours_since_maintenance: e.target.value }))} style={{ width: 120 }} />
+                <span style={{ fontSize: 13, color: 'var(--text3)' }}>hours</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-primary" onClick={saveMaxHours} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+              <button className="btn" onClick={() => setEditHours(null)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ══════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════
@@ -634,6 +868,7 @@ export default function EquipmentInventory() {
   const tabs = [
     { key: 'list', label: '📋 List of Equipment' },
     { key: 'maintenance', label: '🔧 Maintenance Due' },
+    ...(canEdit(session) ? [{ key: 'records', label: '📊 Maintenance Records' }] : []),
     { key: 'settings', label: '⚙️ Settings' },
   ]
 
@@ -653,6 +888,7 @@ export default function EquipmentInventory() {
 
       {tab === 'list' && <EquipmentList session={session} />}
       {tab === 'maintenance' && <MaintenanceDue session={session} />}
+      {tab === 'records' && <MaintenanceRecords session={session} />}
       {tab === 'settings' && <EquipmentSettings session={session} />}
     </div>
   )
