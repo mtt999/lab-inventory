@@ -660,8 +660,14 @@ export default function TrainingRecords() {
 
   async function loadStudents() {
     setLoading(true)
-    const { data } = await sb.from('users').select('*').eq('role', 'student').eq('is_active', true).order('name')
-    setStudents(data || [])
+    if (session?.role === 'student') {
+      // Students only see their own record
+      const { data } = await sb.from('users').select('*').eq('id', session.userId).single()
+      setStudents(data ? [data] : [])
+    } else {
+      const { data } = await sb.from('users').select('*').eq('role', 'student').eq('is_active', true).order('name')
+      setStudents(data || [])
+    }
     setLoading(false)
   }
 
