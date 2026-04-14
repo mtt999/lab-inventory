@@ -9,7 +9,6 @@ import Results from './screens/Results'
 import Projects from './screens/Projects'
 import ProjectDetail from './screens/ProjectDetail'
 import History from './screens/History'
-import Admin from './screens/Admin'
 import TrainingRecords from './screens/TrainingRecords'
 import Profile from './screens/Profile'
 import EquipmentInventory from './screens/EquipmentInventory'
@@ -54,7 +53,6 @@ export default function App() {
     projects: <Projects />,
     'project-detail': <ProjectDetail />,
     history: <History />,
-    admin: <Admin />,
     training: <TrainingRecords />,
     profile: <Profile />,
     equipment: <EquipmentInventory />,
