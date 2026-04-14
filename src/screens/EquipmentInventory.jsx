@@ -24,17 +24,6 @@ function canEdit(session) {
   return session?.role === 'admin' || session?.role === 'user'
 }
 
-function normalize(str) {
-  return (str || '').toLowerCase().trim()
-    .replace('binder lab', 'Binder Lab')
-    .replace('high bay a', 'High Bay A')
-    .replace('high bay b', 'High Bay B')
-    .replace('high bay c', 'High Bay C')
-    .replace('servo-room', 'Servo Room')
-    .replace('servo room', 'Servo Room')
-    .replace('volumetrics lab', 'Volumetric Lab')
-    .replace('volumetric lab', 'Volumetric Lab')
-}
 
 // ── Equipment Modal ───────────────────────────────────────────
 function EquipmentModal({ item, onClose, onSaved, session }) {
