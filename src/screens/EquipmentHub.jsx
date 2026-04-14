@@ -37,6 +37,9 @@ function EquipmentInfo({ equipment, session }) {
   const [videos, setVideos] = useState([])
   const [sop, setSop] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [access, setAccess] = useState(null) // null=loading, true=allowed, false=blocked
+  const [tempAccess, setTempAccess] = useState(null) // temp access record
+  const [grantingAccess, setGrantingAccess] = useState(false)
   const [editDetails, setEditDetails] = useState(false)
   const [detailsForm, setDetailsForm] = useState({ photo_url: '', website_url: '', notes: '' })
   const [showVideoForm, setShowVideoForm] = useState(false)
@@ -53,6 +56,31 @@ function EquipmentInfo({ equipment, session }) {
 
   async function load() {
     setLoading(true)
+
+    // Check access for students
+    const isStudent = session?.role === 'student'
+    if (isStudent) {
+      // Check passed training
+      const { data: trainRecs } = await sb.from('training_equipment')
+        .select('passed_exam').eq('user_id', session.userId).eq('equipment_id', equipment.id)
+      const hasPassed = trainRecs?.some(r => r.passed_exam)
+
+      if (!hasPassed) {
+        // Check temporary access
+        const { data: tempRec } = await sb.from('equipment_temp_access')
+          .select('*').eq('user_id', session.userId).eq('equipment_id', equipment.id).single()
+        const tempValid = tempRec && new Date(tempRec.expires_at) > new Date()
+        setTempAccess(tempRec || null)
+        setAccess(tempValid)
+        if (!tempValid) { setLoading(false); return }
+      } else {
+        setAccess(true)
+        setTempAccess(null)
+      }
+    } else {
+      setAccess(true)
+    }
+
     const [{ data: det }, { data: vid }, { data: s }] = await Promise.all([
       sb.from('equipment_details').select('*').eq('equipment_id', equipment.id).single(),
       sb.from('equipment_videos').select('*').eq('equipment_id', equipment.id).order('created_at'),
@@ -64,6 +92,27 @@ function EquipmentInfo({ equipment, session }) {
     if (det) setDetailsForm({ photo_url: det.photo_url || '', website_url: det.website_url || '', notes: det.notes || '' })
     if (s) setSopForm({ title: s.title || '', pdf_url: s.pdf_url || '', steps: s.steps || [] })
     setLoading(false)
+  }
+
+  async function grantTempAccess() {
+    setGrantingAccess(true)
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    await sb.from('equipment_temp_access').upsert({
+      user_id: session.userId,
+      equipment_id: equipment.id,
+      granted_by: session.username,
+      granted_at: new Date().toISOString(),
+      expires_at: expires,
+    }, { onConflict: 'user_id,equipment_id' })
+    toast('1-week access granted ✓')
+    setGrantingAccess(false)
+    load()
+  }
+
+  async function revokeAccess(userId) {
+    await sb.from('equipment_temp_access').delete().eq('user_id', userId).eq('equipment_id', equipment.id)
+    toast('Access revoked.')
+    load()
   }
 
   async function saveDetails() {
@@ -133,6 +182,20 @@ function EquipmentInfo({ equipment, session }) {
   }
 
   if (loading) return <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+
+  // Access blocked for students without training or temp access
+  if (access === false) {
+    return (
+      <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>🔒</div>
+        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 8 }}>Access Restricted</div>
+        <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
+          SOP, videos, and documents for <strong>{equipment.nickname || equipment.equipment_name}</strong> are only available to students who have completed training or have been granted temporary access.
+        </div>
+        <div style={{ fontSize: 13, color: 'var(--text3)' }}>Contact an ICT-RE to request access.</div>
+      </div>
+    )
+  }
 
   const steps = sop?.steps || []
 
@@ -310,6 +373,109 @@ function EquipmentInfo({ equipment, session }) {
           </div>
         )}
       </div>
+      {/* ── Temp Access Management (admin/RE only) ── */}
+      {canEdit(session) && (
+        <TemporaryAccessPanel equipment={equipment} session={session} />
+      )}
+    </div>
+  )
+}
+
+// ── Temporary Access Panel ────────────────────────────────────
+function TemporaryAccessPanel({ equipment, session }) {
+  const { toast } = useAppStore()
+  const [students, setStudents] = useState([])
+  const [tempAccesses, setTempAccesses] = useState([])
+  const [trainedIds, setTrainedIds] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [granting, setGranting] = useState(false)
+  const [selectedUser, setSelectedUser] = useState(''
+)
+
+  useEffect(() => { load() }, [equipment.id])
+
+  async function load() {
+    setLoading(true)
+    const [{ data: studs }, { data: temps }, { data: trained }] = await Promise.all([
+      sb.from('users').select('id, name, project_group').eq('role', 'student').eq('is_active', true).order('name'),
+      sb.from('equipment_temp_access').select('*').eq('equipment_id', equipment.id),
+      sb.from('training_equipment').select('user_id').eq('equipment_id', equipment.id).eq('passed_exam', true),
+    ])
+    setStudents(studs || [])
+    setTempAccesses(temps || [])
+    setTrainedIds((trained || []).map(t => t.user_id))
+    setLoading(false)
+  }
+
+  async function grantAccess() {
+    if (!selectedUser) { toast('Select a student.'); return }
+    setGranting(true)
+    const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    await sb.from('equipment_temp_access').upsert({
+      user_id: selectedUser,
+      equipment_id: equipment.id,
+      granted_by: session.username,
+      granted_at: new Date().toISOString(),
+      expires_at: expires,
+    }, { onConflict: 'user_id,equipment_id' })
+    toast('1-week access granted ✓')
+    setSelectedUser('')
+    setGranting(false)
+    load()
+  }
+
+  async function revokeAccess(userId) {
+    await sb.from('equipment_temp_access').delete().eq('user_id', userId).eq('equipment_id', equipment.id)
+    toast('Access revoked.')
+    load()
+  }
+
+  const untrainedStudents = students.filter(s => !trainedIds.includes(s.id))
+
+  return (
+    <div className="card" style={{ borderColor: 'var(--accent)' }}>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>🔑 Temporary Access Management</div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>
+        Grant untrained students 1-week access to view SOP and training materials before their training session.
+      </div>
+
+      {/* Grant access */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+        <select value={selectedUser} onChange={e => setSelectedUser(e.target.value)} style={{ flex: 1, minWidth: 180 }}>
+          <option value="">— Select student —</option>
+          {untrainedStudents.map(s => (
+            <option key={s.id} value={s.id}>{s.name}{s.project_group ? ` (${s.project_group})` : ''}</option>
+          ))}
+        </select>
+        <button className="btn btn-sm btn-primary" onClick={grantAccess} disabled={granting || !selectedUser}>
+          {granting ? 'Granting…' : 'Grant 1-week access'}
+        </button>
+      </div>
+
+      {/* Current temp accesses */}
+      {loading ? null : tempAccesses.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No temporary access currently granted.</div>
+      ) : (
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Active temporary access</div>
+          {tempAccesses.map(ta => {
+            const student = students.find(s => s.id === ta.user_id)
+            const expired = new Date(ta.expires_at) < new Date()
+            const daysLeft = Math.ceil((new Date(ta.expires_at) - new Date()) / 86400000)
+            return (
+              <div key={ta.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--surface2)' }}>
+                <div>
+                  <div style={{ fontWeight: 500, fontSize: 13 }}>{student?.name || 'Unknown'}</div>
+                  <div style={{ fontSize: 11, color: expired ? 'var(--accent2)' : 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                    {expired ? 'EXPIRED' : `${daysLeft}d left`} · Granted by {ta.granted_by} · Expires {new Date(ta.expires_at).toLocaleDateString()}
+                  </div>
+                </div>
+                <button className="btn btn-sm btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => revokeAccess(ta.user_id)}>Revoke</button>
+              </div>
+            )
+          })}
+        </div>
+      )}
     </div>
   )
 }
