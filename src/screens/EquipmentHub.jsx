@@ -198,10 +198,8 @@ function EquipmentInfo({ equipment, session }) {
           <div style={{ fontWeight: 600, fontSize: 15 }}>Equipment Info</div>
           {canEdit(session) && !editDetails && <button className="btn btn-sm" onClick={() => setEditDetails(true)}>✏️ Edit</button>}
         </div>
-
         {editDetails ? (
           <div>
-            {/* Photo upload */}
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Equipment Photo</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -293,87 +291,78 @@ function EquipmentInfo({ equipment, session }) {
           </div>
         ) : (
           <div>
-          {showSopForm && (
-          <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 14 }}>
-            <div className="field"><label>SOP Title</label><input value={sopForm.title} onChange={e => setSopForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Gyratory Compactor Operation Procedure" /></div>
-
-            {/* PDF upload */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>SOP PDF Document</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {sopForm.pdf_url && <a href={sopForm.pdf_url} target="_blank" rel="noopener" style={{ fontSize: 13, color: 'var(--accent)' }}>📄 Current PDF</a>}
-                <button className="btn btn-sm" onClick={() => sopPdfRef.current?.click()} disabled={uploading}>{uploading ? '⏳' : '⬆️ Upload PDF'}</button>
-                <input ref={sopPdfRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => uploadSopPdf(e.target.files[0])} />
-              </div>
-            </div>
-
-            {/* Steps */}
-            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Step-by-step procedure</div>
-            {sopForm.steps.map((step, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{i + 1}</div>
-                <div style={{ flex: 1, fontSize: 13, padding: '6px 10px', background: 'var(--surface)', borderRadius: 6, border: '1px solid var(--border)' }}>{step.text}</div>
-                <button onClick={() => moveStep(i, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text2)', fontSize: 14, padding: '0 4px' }}>↑</button>
-                <button onClick={() => moveStep(i, 1)} disabled={i === sopForm.steps.length - 1} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text2)', fontSize: 14, padding: '0 4px' }}>↓</button>
-                <button onClick={() => removeStep(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: 14, padding: '0 4px' }}>✕</button>
-              </div>
-            ))}
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <input value={newStep} onChange={e => setNewStep(e.target.value)} onKeyDown={e => e.key === 'Enter' && addStep()} placeholder="Type a step and press Enter or Add" style={{ flex: 1 }} />
-              <button className="btn btn-sm" onClick={addStep}>Add step</button>
-            </div>
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-              <button className="btn btn-primary btn-sm" onClick={saveSop}>Save SOP</button>
-              <button className="btn btn-sm" onClick={() => setShowSopForm(false)}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {!sop ? (
-          <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No SOP added yet.</div>
-        ) : (
-          <div>
-            {sop.title && <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>{sop.title}</div>}
-            <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-              {sop.pdf_url && <a href={sop.pdf_url} target="_blank" rel="noopener" className="btn btn-sm">📄 Download SOP PDF</a>}
-              {steps.length > 0 && (
-                <button className="btn btn-sm btn-primary" onClick={() => setSopStep(0)}>
-                  📖 View step-by-step ({steps.length} steps)
-                </button>
-              )}
-            </div>
-
-            {/* Step-by-step viewer */}
-            {sopStep !== null && (
-              <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-                <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 32, maxWidth: 500, width: '100%', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-                    <div style={{ fontSize: 13, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>Step {sopStep + 1} of {steps.length}</div>
-                    <button className="btn btn-sm" onClick={() => setSopStep(null)}>✕ Close</button>
-                  </div>
-
-                  {/* Progress bar */}
-                  <div style={{ height: 4, background: 'var(--surface2)', borderRadius: 99, marginBottom: 28, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', background: 'var(--accent)', borderRadius: 99, width: `${((sopStep + 1) / steps.length) * 100}%`, transition: 'width 0.3s' }} />
-                  </div>
-
-                  <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, margin: '0 auto 20px' }}>{sopStep + 1}</div>
-                  <div style={{ fontSize: 17, fontWeight: 500, textAlign: 'center', lineHeight: 1.6, marginBottom: 32 }}>{steps[sopStep]?.text}</div>
-
-                  <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-                    <button className="btn" onClick={() => setSopStep(s => Math.max(0, s - 1))} disabled={sopStep === 0}>← Previous</button>
-                    {sopStep < steps.length - 1
-                      ? <button className="btn btn-primary" onClick={() => setSopStep(s => s + 1)}>Next →</button>
-                      : <button className="btn btn-primary" onClick={() => setSopStep(null)}>✓ Done</button>
-                    }
+            {showSopForm && (
+              <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 14 }}>
+                <div className="field"><label>SOP Title</label><input value={sopForm.title} onChange={e => setSopForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. Gyratory Compactor Operation Procedure" /></div>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>SOP PDF Document</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {sopForm.pdf_url && <a href={sopForm.pdf_url} target="_blank" rel="noopener" style={{ fontSize: 13, color: 'var(--accent)' }}>📄 Current PDF</a>}
+                    <button className="btn btn-sm" onClick={() => sopPdfRef.current?.click()} disabled={uploading}>{uploading ? '⏳' : '⬆️ Upload PDF'}</button>
+                    <input ref={sopPdfRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => uploadSopPdf(e.target.files[0])} />
                   </div>
                 </div>
+                <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>Step-by-step procedure</div>
+                {sopForm.steps.map((step, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, flexShrink: 0 }}>{i + 1}</div>
+                    <div style={{ flex: 1, fontSize: 13, padding: '6px 10px', background: 'var(--surface)', borderRadius: 6, border: '1px solid var(--border)' }}>{step.text}</div>
+                    <button onClick={() => moveStep(i, -1)} disabled={i === 0} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text2)', fontSize: 14, padding: '0 4px' }}>↑</button>
+                    <button onClick={() => moveStep(i, 1)} disabled={i === sopForm.steps.length - 1} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text2)', fontSize: 14, padding: '0 4px' }}>↓</button>
+                    <button onClick={() => removeStep(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent2)', fontSize: 14, padding: '0 4px' }}>✕</button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <input value={newStep} onChange={e => setNewStep(e.target.value)} onKeyDown={e => e.key === 'Enter' && addStep()} placeholder="Type a step and press Enter or Add" style={{ flex: 1 }} />
+                  <button className="btn btn-sm" onClick={addStep}>Add step</button>
+                </div>
+                <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+                  <button className="btn btn-primary btn-sm" onClick={saveSop}>Save SOP</button>
+                  <button className="btn btn-sm" onClick={() => setShowSopForm(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+            {!sop ? (
+              <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No SOP added yet.</div>
+            ) : (
+              <div>
+                {sop.title && <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>{sop.title}</div>}
+                <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+                  {sop.pdf_url && <a href={sop.pdf_url} target="_blank" rel="noopener" className="btn btn-sm">📄 Download SOP PDF</a>}
+                  {steps.length > 0 && (
+                    <button className="btn btn-sm btn-primary" onClick={() => setSopStep(0)}>
+                      📖 View step-by-step ({steps.length} steps)
+                    </button>
+                  )}
+                </div>
+                {sopStep !== null && (
+                  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+                    <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 32, maxWidth: 500, width: '100%', border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                        <div style={{ fontSize: 13, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>Step {sopStep + 1} of {steps.length}</div>
+                        <button className="btn btn-sm" onClick={() => setSopStep(null)}>✕ Close</button>
+                      </div>
+                      <div style={{ height: 4, background: 'var(--surface2)', borderRadius: 99, marginBottom: 28, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', background: 'var(--accent)', borderRadius: 99, width: `${((sopStep + 1) / steps.length) * 100}%`, transition: 'width 0.3s' }} />
+                      </div>
+                      <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--accent)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, margin: '0 auto 20px' }}>{sopStep + 1}</div>
+                      <div style={{ fontSize: 17, fontWeight: 500, textAlign: 'center', lineHeight: 1.6, marginBottom: 32 }}>{steps[sopStep]?.text}</div>
+                      <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                        <button className="btn" onClick={() => setSopStep(s => Math.max(0, s - 1))} disabled={sopStep === 0}>← Previous</button>
+                        {sopStep < steps.length - 1
+                          ? <button className="btn btn-primary" onClick={() => setSopStep(s => s + 1)}>Next →</button>
+                          : <button className="btn btn-primary" onClick={() => setSopStep(null)}>✓ Done</button>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         )}
       </div>
+
       {/* ── Temp Access Management (admin/RE only) ── */}
       {canEdit(session) && (
         <TemporaryAccessPanel equipment={equipment} session={session} />
@@ -381,6 +370,7 @@ function EquipmentInfo({ equipment, session }) {
     </div>
   )
 }
+
 
 // ── Temporary Access Panel ────────────────────────────────────
 function TemporaryAccessPanel({ equipment, session }) {
