@@ -106,7 +106,10 @@ function FreshTraining({ students, session }) {
             {students.map(u => {
               const rec = getRecord(u.id)
               const isOwn = session.username === u.name
-              const editable = canEdit(session) || isOwn
+              // Students are read-only on Instructions Read — only admin/RE can change it
+              const editable = canEdit(session)
+              // Students can still upload their own certificate
+              const canUploadCert = canEdit(session) || isOwn
               return (
                 <tr key={u.id}>
                   <td>
@@ -115,23 +118,26 @@ function FreshTraining({ students, session }) {
                   </td>
                   <td><span style={{ fontSize: 12, color: 'var(--text2)' }}>{u.project_group || '—'}</span></td>
                   <td>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: editable ? 'pointer' : 'default', marginBottom: 0 }}>
-                      <input type="checkbox" checked={rec?.instructions_read || false}
-                        onChange={() => editable && toggleInstructions(u)}
-                        disabled={!editable}
-                        style={{ width: 'auto' }} />
-                      <span style={{ fontSize: 13 }}>{rec?.instructions_read ? 'Yes' : 'No'}</span>
-                    </label>
+                    {editable ? (
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 0 }}>
+                        <input type="checkbox" checked={rec?.instructions_read || false}
+                          onChange={() => toggleInstructions(u)}
+                          style={{ width: 'auto' }} />
+                        <span style={{ fontSize: 13 }}>{rec?.instructions_read ? 'Yes' : 'No'}</span>
+                      </label>
+                    ) : (
+                      <StatusBadge done={rec?.instructions_read} />
+                    )}
                   </td>
                   <td>
                     {rec?.certificate_url ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                         <a href={rec.certificate_url} target="_blank" rel="noopener" style={{ fontSize: 13, color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>📕 {rec.certificate_name || 'View'}</a>
-                        {editable && (
+                        {canUploadCert && (
                           <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => fileRefs.current[u.id]?.click()}>Replace</button>
                         )}
                       </div>
-                    ) : editable ? (
+                    ) : canUploadCert ? (
                       <button className="btn btn-sm" onClick={() => fileRefs.current[u.id]?.click()} disabled={uploading === u.id}>
                         {uploading === u.id ? '⏳' : '⬆️ Upload'}
                       </button>
