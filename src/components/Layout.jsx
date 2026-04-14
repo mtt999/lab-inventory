@@ -26,7 +26,7 @@ export default function Layout({ children }) {
           <button className="btn btn-sm" onClick={logout}>Sign out</button>
         </div>
       </header>
-      <main style={{ flex: 1, maxWidth: 960, margin: '0 auto', width: '100%', padding: '32px 20px' }}>
+      <main style={{ flex: 1, maxWidth: screen === 'booking' ? '100%' : 960, margin: '0 auto', width: '100%', padding: screen === 'booking' ? '24px 16px' : '32px 20px' }}>
         {children}
       </main>
     </div>

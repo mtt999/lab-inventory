@@ -37,6 +37,7 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
     title: booking?.title || '',
     start_time: booking?.start_time ? new Date(booking.start_time).toISOString().slice(0,16) : '',
     end_time: booking?.end_time ? new Date(booking.end_time).toISOString().slice(0,16) : '',
+    duration: booking ? Math.round((new Date(booking.end_time) - new Date(booking.start_time)) / 3600000) : 1,
     notes: booking?.notes || '',
     booked_on_behalf_of: booking?.booked_on_behalf_of || '',
   })
@@ -124,12 +125,43 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
         </div>
 
         <div className="grid-2">
-          <div className="field"><label>Start *</label>
-            <input type="datetime-local" value={form.start_time} onChange={e => setForm(f => ({ ...f, start_time: e.target.value }))} />
+          <div className="field"><label>Date *</label>
+            <input type="date" value={form.start_time ? form.start_time.split('T')[0] : ''} onChange={e => {
+              const date = e.target.value
+              const time = form.start_time ? form.start_time.split('T')[1] : '09:00'
+              const newStart = `${date}T${time}`
+              const dur = form.duration || 1
+              const end = new Date(new Date(newStart).getTime() + dur * 3600000)
+              setForm(f => ({ ...f, start_time: newStart, end_time: end.toISOString().slice(0,16) }))
+            }} />
           </div>
-          <div className="field"><label>End *</label>
-            <input type="datetime-local" value={form.end_time} onChange={e => setForm(f => ({ ...f, end_time: e.target.value }))} />
+          <div className="field"><label>Start Time *</label>
+            <input type="time" value={form.start_time ? form.start_time.split('T')[1] : ''} onChange={e => {
+              const date = form.start_time ? form.start_time.split('T')[0] : new Date().toISOString().split('T')[0]
+              const newStart = `${date}T${e.target.value}`
+              const dur = form.duration || 1
+              const end = new Date(new Date(newStart).getTime() + dur * 3600000)
+              setForm(f => ({ ...f, start_time: newStart, end_time: end.toISOString().slice(0,16) }))
+            }} />
           </div>
+        </div>
+        <div className="field"><label>Duration</label>
+          <select value={form.duration || 1} onChange={e => {
+            const dur = parseFloat(e.target.value)
+            const end = form.start_time ? new Date(new Date(form.start_time).getTime() + dur * 3600000).toISOString().slice(0,16) : ''
+            setForm(f => ({ ...f, duration: dur, end_time: end }))
+          }}>
+            <option value={0.5}>30 minutes</option>
+            <option value={1}>1 hour</option>
+            <option value={2}>2 hours</option>
+            <option value={3}>3 hours</option>
+            <option value={4}>4 hours (half day)</option>
+            <option value={8}>8 hours (full day)</option>
+            <option value={24}>Full day (24h)</option>
+            <option value={48}>2 days</option>
+            <option value={72}>3 days</option>
+            <option value={168}>1 week</option>
+          </select>
         </div>
 
         {conflict && (
@@ -206,23 +238,37 @@ function WeekView({ weekStart, bookings, selectedEquipment, onSlotClick, onBooki
               {hour === 0 ? '12am' : hour < 12 ? `${hour}am` : hour === 12 ? '12pm' : `${hour-12}pm`}
             </div>
             {days.map((day, di) => {
-              const slotBookings = getBookingsForSlot(day, hour)
               const isDragging = drag && sameDay(day, drag.startDay) && hour >= drag.startHour && hour <= drag.endHour
+              // Only render booking block at its START hour
+              const startingBookings = bookings.filter(b => {
+                const s = new Date(b.start_time)
+                return sameDay(s, day) && s.getHours() === hour
+              })
               return (
                 <div key={`${hour}-${di}`}
                   style={{ height: 48, borderTop: '1px solid var(--surface2)', borderLeft: '1px solid var(--surface2)', position: 'relative', background: isDragging ? 'var(--accent-light)' : 'transparent', cursor: 'pointer' }}
                   onMouseDown={() => handleMouseDown(day, hour)}
                   onMouseEnter={() => handleMouseEnter(hour)}
                   onMouseUp={() => handleMouseUp(day, hour)}>
-                  {slotBookings.map(b => (
-                    <div key={b.id} onClick={e => { e.stopPropagation(); onBookingClick(b) }}
-                      style={{ position: 'absolute', left: 2, right: 2, top: 2, bottom: 2, background: statusBg[b.status], border: `1px solid ${statusColor[b.status]}40`, borderLeft: `3px solid ${statusColor[b.status]}`, borderRadius: 4, padding: '2px 4px', fontSize: 10, overflow: 'hidden', zIndex: 2, cursor: 'pointer' }}>
-                      <div style={{ fontWeight: 600, color: statusColor[b.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {b.booked_on_behalf_of || b.user_name}
+                  {startingBookings.map(b => {
+                    const startH = new Date(b.start_time)
+                    const endH = new Date(b.end_time)
+                    // Clamp to end of visible day
+                    const dayEnd = new Date(day); dayEnd.setHours(24, 0, 0, 0)
+                    const durationMins = Math.min((endH - startH), (dayEnd - startH)) / 60000
+                    const topOffset = (startH.getMinutes() / 60) * 48
+                    const height = Math.max(20, (durationMins / 60) * 48 - 2)
+                    return (
+                      <div key={b.id} onClick={e => { e.stopPropagation(); onBookingClick(b) }}
+                        style={{ position: 'absolute', left: 2, right: 2, top: topOffset, height, background: statusBg[b.status], border: `1px solid ${statusColor[b.status]}40`, borderLeft: `3px solid ${statusColor[b.status]}`, borderRadius: 4, padding: '2px 4px', fontSize: 10, overflow: 'hidden', zIndex: 2, cursor: 'pointer' }}>
+                        <div style={{ fontWeight: 600, color: statusColor[b.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {b.booked_on_behalf_of || b.user_name}
+                        </div>
+                        {height > 30 && b.title && <div style={{ color: statusColor[b.status], opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</div>}
+                        {height > 44 && <div style={{ color: statusColor[b.status], opacity: 0.6, fontSize: 9 }}>{fmtTime(b.start_time)}–{fmtTime(b.end_time)}</div>}
                       </div>
-                      {b.title && <div style={{ color: statusColor[b.status], opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</div>}
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )
             })}
@@ -366,7 +412,6 @@ function BookingCalendar({ session }) {
   }
 
   async function loadBookings() {
-    if (selectedEq.length === 0) { setBookings([]); return }
     let start, end
     if (calView === 'week') {
       start = weekStart.toISOString()
@@ -375,10 +420,14 @@ function BookingCalendar({ session }) {
       start = startOfMonth(monthDate).toISOString()
       end = addDays(endOfMonth(monthDate), 1).toISOString()
     }
-    const { data } = await sb.from('equipment_bookings').select('*')
-      .in('equipment_id', selectedEq)
+    let query = sb.from('equipment_bookings').select('*')
       .gte('start_time', start).lt('start_time', end)
       .order('start_time')
+    // Filter by selected equipment if any selected
+    if (selectedEq.length > 0) {
+      query = query.in('equipment_id', selectedEq)
+    }
+    const { data } = await query
     setBookings(data || [])
   }
 
@@ -454,7 +503,13 @@ function BookingCalendar({ session }) {
         )}
         <div style={{ maxHeight: 500, overflowY: 'auto' }}>
           {loading ? <div style={{ padding: 16, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-            : filteredEq.map(e => (
+            : categories.map(cat => {
+              const catItems = filteredEq.filter(e => (e.category || 'Other') === cat)
+              if (catItems.length === 0) return null
+              return (
+                <div key={cat}>
+                  <div style={{ padding: '6px 12px 4px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', background: 'var(--surface2)', borderBottom: '0.5px solid var(--border)' }}>{cat}</div>
+                  {catItems.map(e => (
               <div key={e.id} onClick={() => toggleEquipment(e.id)}
                 style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid var(--surface2)', background: selectedEq.includes(e.id) ? 'var(--accent-light)' : 'transparent', display: 'flex', alignItems: 'center', gap: 8 }}
                 onMouseEnter={ev => { if (!selectedEq.includes(e.id)) ev.currentTarget.style.background = 'var(--surface2)' }}
