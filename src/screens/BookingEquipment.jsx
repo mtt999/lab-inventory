@@ -58,11 +58,13 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
 
   async function checkConflict() {
     if (!form.equipment_id || !form.start_time || !form.end_time) return
+    // Convert local datetime strings to UTC ISO for correct Supabase comparison
+    const startUTC = new Date(form.start_time).toISOString()
+    const endUTC = new Date(form.end_time).toISOString()
     const { data } = await sb.from('equipment_bookings')
       .select('*').eq('equipment_id', form.equipment_id)
       .neq('status', 'cancelled').neq('status', 'denied')
-      .lt('start_time', form.end_time).gt('end_time', form.start_time)
-    // Exclude the booking being edited AND any booking by the same user that was just cancelled
+      .lt('start_time', endUTC).gt('end_time', startUTC)
     const conflicts = (data || []).filter(b => b.id !== booking?.id)
     setConflict(conflicts.length > 0 ? conflicts[0] : null)
   }
@@ -168,7 +170,7 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
 
         <div style={{ display: 'flex', gap: 10 }}>
           <button className="btn btn-primary" onClick={save} disabled={saving || !!conflict}>{saving ? 'Saving…' : booking ? 'Update' : 'Book'}</button>
-          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn" onClick={() => { setConflict(null); onClose() }}>Cancel</button>
         </div>
       </div>
     </div>
