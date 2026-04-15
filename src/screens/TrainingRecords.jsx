@@ -337,9 +337,22 @@ function EquipmentTraining({ students, session }) {
   }
 
   function getRetrainingInfo(userId, equipmentId) {
-    // Check if user has a pending retraining request for this equipment
-    const req = pendingRetraining.find(r => r.user_id === userId && r.equipment_id === equipmentId)
-    return req || null
+    return pendingRetraining.find(r => r.user_id === userId && r.equipment_id === equipmentId) || null
+  }
+
+  async function submitRetrainingRequest(userId, userName, equipmentId) {
+    const eq = equipment.find(e => e.id === equipmentId)
+    const { data: existing } = await sb.from('retraining_requests')
+      .select('id').eq('user_id', userId).eq('equipment_id', equipmentId).eq('status', 'pending').maybeSingle()
+    if (existing) { toast('Retraining request already submitted.'); return }
+    await sb.from('retraining_requests').insert({
+      user_id: userId, user_name: userName,
+      equipment_id: equipmentId,
+      equipment_name: eq?.nickname || eq?.equipment_name,
+      status: 'pending',
+    })
+    toast('Retraining request submitted ✓')
+    load()
   }
 
   async function addTrainingRecord(userId, equipmentId, date, trainedBy, passed) {
@@ -453,6 +466,15 @@ function EquipmentTraining({ students, session }) {
       {/* ── TRAINING RECORDS TAB ── */}
       {equipSubTab === 'training' && (
         <div>
+          {/* Student: request retraining button */}
+          {!canEdit(session) && session?.role === 'student' && (
+            <RetrainingRequestPanel
+              session={session}
+              equipment={equipment}
+              pendingRetraining={pendingRetraining}
+              onSubmit={submitRetrainingRequest}
+            />
+          )}
           {students.map(u => {
             const recs = getRecords(u.id)
             return (
@@ -509,6 +531,31 @@ function EquipmentTraining({ students, session }) {
                             </td>
                             {canEdit(session) && <td><button className="btn btn-sm btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => deleteRecord(rec.id)}>✕</button></td>}
                           </tr>
+                          {/* Retraining required banner */}
+                          {retrainReq && (
+                            <tr key={`retrain-notice-${rec.id}`}>
+                              <td colSpan={canEdit(session) ? 6 : 5} style={{ padding: 0, border: 'none' }}>
+                                <div style={{ background: '#fef3c7', borderTop: '1px solid #f0d070', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                                  <div style={{ fontSize: 12, color: '#92400e' }}>
+                                    ⚠️ <strong>Retraining required</strong> — not used in 3+ months.
+                                    {retrainReq ? ' Request pending admin approval.' : ''}
+                                  </div>
+                                  {canEdit(session) && (
+                                    <button className="btn btn-sm btn-primary" style={{ fontSize: 11 }}
+                                      onClick={() => setAddingRecord({ userId: u.id, equipmentId: rec.equipment_id, isRetraining: true })}>
+                                      🔄 Log retraining
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          {/* No pending request yet — show request button for students */}
+                          {!retrainReq && !canEdit(session) && (() => {
+                            // Check if this equipment needs retraining (older than 3 months)
+                            // We check via booking_notifications or just show button always for trained equipment
+                            return null // Will be shown via booking page notification
+                          })()}
                         )
                       })}
                     </tbody>
@@ -530,6 +577,46 @@ function EquipmentTraining({ students, session }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ── Retraining Request Panel (students) ──────────────────────
+function RetrainingRequestPanel({ session, equipment, pendingRetraining, onSubmit }) {
+  const [selectedEq, setSelectedEq] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const { toast } = useAppStore()
+
+  async function submit() {
+    if (!selectedEq) { toast('Select equipment.'); return }
+    setSubmitting(true)
+    await onSubmit(session.userId, session.username, selectedEq)
+    setSelectedEq('')
+    setSubmitting(false)
+  }
+
+  const pendingIds = new Set(pendingRetraining.map(r => r.equipment_id))
+
+  return (
+    <div className="card" style={{ marginBottom: 16, borderColor: '#0369a1' }}>
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4, color: '#0369a1' }}>🔄 Request Retraining</div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>
+        If you haven't used equipment in over 3 months, select it below to request retraining.
+        An admin or RE will review and approve your request.
+      </div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={selectedEq} onChange={e => setSelectedEq(e.target.value)} style={{ flex: 1, minWidth: 200 }}>
+          <option value="">— Select equipment —</option>
+          {equipment.map(e => (
+            <option key={e.id} value={e.id} disabled={pendingIds.has(e.id)}>
+              {e.nickname || e.equipment_name}{pendingIds.has(e.id) ? ' (pending)' : ''}
+            </option>
+          ))}
+        </select>
+        <button className="btn btn-primary btn-sm" onClick={submit} disabled={submitting || !selectedEq}>
+          {submitting ? 'Submitting…' : 'Submit request'}
+        </button>
+      </div>
     </div>
   )
 }
