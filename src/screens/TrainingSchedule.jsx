@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
 
@@ -298,6 +298,129 @@ export function UserTrainingSchedule({ session }) {
 // ══════════════════════════════════════════════════════════════
 // EXAM SYSTEM
 // ══════════════════════════════════════════════════════════════
+// ── PDF/Word Question Uploader (AI-powered) ──────────────────
+function PdfQuestionUploader({ equipmentId, onImported }) {
+  const { toast } = useAppStore()
+  const [file, setFile] = useState(null)
+  const [extracting, setExtracting] = useState(false)
+  const [preview, setPreview] = useState(null)
+  const fileRef = useRef(null)
+
+  async function readFileText(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = e => resolve(e.target.result)
+      reader.onerror = reject
+      if (file.name.endsWith('.pdf')) {
+        // Read as base64 for PDF
+        reader.readAsDataURL(file)
+      } else {
+        reader.readAsText(file)
+      }
+    })
+  }
+
+  async function extractQuestions() {
+    if (!file) return
+    setExtracting(true)
+    try {
+      const fileContent = await readFileText(file)
+      const isBase64 = fileContent.startsWith('data:')
+
+      const messages = isBase64
+        ? [{ role: 'user', content: [
+            { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileContent.split(',')[1] } },
+            { type: 'text', text: 'Extract all exam questions from this document. Return ONLY a JSON array with no markdown. Each object must have: question (string), option_a, option_b, option_c, option_d (strings), correct_answer ("a","b","c", or "d"). If the correct answer is marked/highlighted, use it. If not, make your best guess based on context.' }
+          ]}]
+        : [{ role: 'user', content: `Extract all exam questions from this text. Return ONLY a JSON array with no markdown. Each object: { question, option_a, option_b, option_c, option_d, correct_answer }. Correct answer must be "a","b","c", or "d".
+
+Text:
+${fileContent.slice(0, 8000)}` }]
+
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 4000, messages })
+      })
+      const data = await response.json()
+      const text = data.content?.map(c => c.text || '').join('') || ''
+      const clean = text.replace(/```json|```/g, '').trim()
+      const questions = JSON.parse(clean)
+      if (!Array.isArray(questions) || questions.length === 0) throw new Error('No questions found')
+      setPreview(questions)
+      toast(`Found ${questions.length} questions — review and import.`)
+    } catch (e) {
+      console.error(e)
+      toast('Could not extract questions. Make sure the file has numbered questions with A/B/C/D options.')
+    }
+    setExtracting(false)
+  }
+
+  async function importQuestions() {
+    if (!preview?.length) return
+    let count = 0
+    for (let i = 0; i < preview.length; i++) {
+      const q = preview[i]
+      if (!q.question) continue
+      await sb.from('equipment_exam_questions').insert({
+        equipment_id: equipmentId,
+        question: q.question, option_a: q.option_a||'', option_b: q.option_b||'',
+        option_c: q.option_c||'', option_d: q.option_d||'',
+        correct_answer: (q.correct_answer||'a').toLowerCase().charAt(0),
+        order_num: i,
+      })
+      count++
+    }
+    toast(`${count} questions imported ✓`)
+    setPreview(null); setFile(null)
+    onImported()
+  }
+
+  return (
+    <div>
+      <input ref={fileRef} type="file" accept=".pdf,.doc,.docx,.txt" style={{ display: 'none' }}
+        onChange={e => { setFile(e.target.files[0]); setPreview(null) }} />
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: preview ? 16 : 0 }}>
+        <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>
+          📁 {file ? file.name : 'Choose file'}
+        </button>
+        {file && (
+          <button className="btn btn-sm btn-primary" onClick={extractQuestions} disabled={extracting}>
+            {extracting ? '⏳ Extracting questions…' : '✨ Extract questions with AI'}
+          </button>
+        )}
+        {file && <button className="btn btn-sm" onClick={() => { setFile(null); setPreview(null) }}>✕</button>}
+      </div>
+
+      {preview && (
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8, color: 'var(--accent)' }}>
+            Preview — {preview.length} questions found
+          </div>
+          <div style={{ maxHeight: 300, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+            {preview.map((q, i) => (
+              <div key={i} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: i < preview.length-1 ? '1px solid var(--surface2)' : 'none' }}>
+                <div style={{ fontWeight: 500, fontSize: 12, marginBottom: 4 }}>Q{i+1}: {q.question}</div>
+                <div style={{ fontSize: 11, color: 'var(--text2)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+                  {['a','b','c','d'].map(opt => q[`option_${opt}`] && (
+                    <div key={opt} style={{ color: q.correct_answer?.toLowerCase() === opt ? '#1e4d39' : 'inherit', fontWeight: q.correct_answer?.toLowerCase() === opt ? 600 : 400 }}>
+                      {opt.toUpperCase()}. {q[`option_${opt}`]} {q.correct_answer?.toLowerCase() === opt && '✓'}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-primary btn-sm" onClick={importQuestions}>Import all {preview.length} questions</button>
+            <button className="btn btn-sm" onClick={() => setPreview(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function ExamTab({ session }) {
   const { toast } = useAppStore()
   const [equipment, setEquipment] = useState([])
@@ -332,7 +455,7 @@ export function ExamTab({ session }) {
   async function loadEquipmentData() {
     const [{ data: q }, { data: r }, { data: p }] = await Promise.all([
       sb.from('equipment_exam_questions').select('*').eq('equipment_id', selectedEq).order('order_num'),
-      sb.from('equipment_exam_results').select('*').eq('equipment_id', selectedEq).order('taken_at', { ascending: false }),
+      sb.from('equipment_exam_results').select('*, users(name)').eq('equipment_id', selectedEq).order('taken_at', { ascending: false }),
       session.userId ? sb.from('equipment_material_progress').select('*').eq('user_id', session.userId).eq('equipment_id', selectedEq).maybeSingle() : { data: null },
     ])
     setQuestions(q || [])
@@ -404,9 +527,19 @@ export function ExamTab({ session }) {
             <div>
               <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>📝 Exam Questions</div>
 
-              {/* Add/Edit question form */}
+                  {/* PDF Upload to extract questions */}
+              <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>📄 Upload exam file (PDF or Word)</div>
+                <div style={{ fontSize: 12, color: 'var(--text2)', marginBottom: 12 }}>
+                  Upload a PDF or Word document with exam questions. The AI will extract and format them automatically.
+                  Format: numbered questions with A/B/C/D options and mark the correct answer.
+                </div>
+                <PdfQuestionUploader equipmentId={selectedEq} onImported={loadEquipmentData} />
+              </div>
+
+              {/* Add/Edit question manually */}
               <div className="card" style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 10 }}>{editQuestion ? 'Edit question' : 'Add question'}</div>
+                <div style={{ fontWeight: 500, fontSize: 13, marginBottom: 10 }}>{editQuestion ? '✏️ Edit question' : '+ Add question manually'}</div>
                 <div className="field"><label>Question *</label><textarea rows={2} value={newQ.question} onChange={e => setNewQ(f => ({ ...f, question: e.target.value }))} style={{ resize: 'vertical' }} /></div>
                 <div className="grid-2">
                   <div className="field"><label>Option A</label><input value={newQ.option_a} onChange={e => setNewQ(f => ({ ...f, option_a: e.target.value }))} /></div>
@@ -456,7 +589,7 @@ export function ExamTab({ session }) {
                       <tbody>
                         {results.map(r => (
                           <tr key={r.id}>
-                            <td style={{ fontWeight: 500 }}>{r.user_id === session.userId ? 'You' : r.user_id}</td>
+                            <td style={{ fontWeight: 500 }}>{r.users?.name || (r.user_id === session.userId ? session.username : '—')}</td>
                             <td style={{ fontFamily: 'var(--mono)' }}>{r.score}/{r.total} ({Math.round(r.score/r.total*100)}%)</td>
                             <td><span style={{ background: r.passed ? '#e8f2ee' : '#fcebeb', color: r.passed ? '#1e4d39' : '#a32d2d', borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{r.passed ? 'Passed' : 'Failed'}</span></td>
                             <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{new Date(r.taken_at).toLocaleDateString()}</td>
@@ -544,15 +677,25 @@ export function ExamTab({ session }) {
               {/* Result after submit */}
               {submitted && (
                 <div style={{ textAlign: 'center', padding: 32 }}>
-                  <div style={{ fontSize: 48, marginBottom: 12 }}>{submitted.passed ? '🎉' : '📚'}</div>
-                  <div style={{ fontWeight: 700, fontSize: 22, color: submitted.passed ? '#1e4d39' : '#a32d2d', marginBottom: 8 }}>
-                    {submitted.passed ? 'Congratulations!' : 'Not quite there'}
+                  <div style={{ fontSize: 56, marginBottom: 12 }}>{submitted.passed ? '🎉' : '📚'}</div>
+                  <div style={{ fontWeight: 700, fontSize: 24, color: submitted.passed ? '#1e4d39' : '#a32d2d', marginBottom: 12 }}>
+                    {submitted.passed ? 'Exam Passed!' : 'Not Passed'}
                   </div>
-                  <div style={{ fontSize: 16, marginBottom: 4 }}>Score: {submitted.score}/{submitted.total} ({Math.round(submitted.score/submitted.total*100)}%)</div>
-                  <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 20 }}>
-                    {submitted.passed ? 'You passed! Your instructor will be notified.' : 'You need 70% to pass. Review the materials and try again.'}
+                  {/* Grade circle */}
+                  <div style={{ width: 100, height: 100, borderRadius: '50%', background: submitted.passed ? '#e8f2ee' : '#fcebeb', border: `4px solid ${submitted.passed ? '#1e4d39' : '#a32d2d'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                    <div style={{ fontWeight: 700, fontSize: 24, color: submitted.passed ? '#1e4d39' : '#a32d2d' }}>{Math.round(submitted.score/submitted.total*100)}%</div>
+                    <div style={{ fontSize: 11, color: 'var(--text3)' }}>{submitted.score}/{submitted.total}</div>
                   </div>
-                  <button className="btn btn-primary" onClick={() => setSubmitted(null)}>Done</button>
+                  <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 6 }}>
+                    Pass mark: 70% · Your score: {Math.round(submitted.score/submitted.total*100)}%
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>
+                    {submitted.passed ? '✓ Your instructor has been notified. You can now book this equipment.' : 'Review the SOP and training materials, then try again.'}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                    <button className="btn btn-primary" onClick={() => setSubmitted(null)}>Done</button>
+                    {!submitted.passed && <button className="btn" onClick={() => { setSubmitted(null); setExamMode(true); setAnswers({}) }}>Retake exam</button>}
+                  </div>
                 </div>
               )}
             </div>
