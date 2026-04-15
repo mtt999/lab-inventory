@@ -566,10 +566,12 @@ function BookingCalendar({ session }) {
         const eq = eqList.find(e => e.id === eqId)
         if (!eq) continue
         const msg = `Retraining required: you haven't used ${eq.nickname || eq.equipment_name} in over 3 months.`
-        await sb.from('booking_notifications').insert({
-          booking_id: null, user_id: session.userId,
-          type: 'retraining_required', message: msg, read: false,
-        }).catch(() => {})
+        try {
+          await sb.from('booking_notifications').insert({
+            booking_id: null, user_id: session.userId,
+            type: 'retraining_required', message: msg, read: false,
+          })
+        } catch(e) {}
       }
     }
   }

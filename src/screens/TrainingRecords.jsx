@@ -1,3 +1,4 @@
+import React from 'react'
 import { TrainingRequestsPanel, UserTrainingSchedule, ExamTab } from './TrainingSchedule'
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
