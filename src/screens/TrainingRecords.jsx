@@ -509,7 +509,8 @@ function EquipmentTraining({ students, session }) {
                         const expired = isExpired(rec)
                         const soon = isExpiringSoon(rec)
                         return (
-                          <tr key={rec.id} style={{ background: rec.is_retraining ? '#e0f2fe' : expired ? 'var(--accent2-light)' : soon ? 'var(--warn-light)' : 'transparent' }}>
+                          <React.Fragment key={rec.id}>
+                          <tr style={{ background: rec.is_retraining ? '#e0f2fe' : expired ? 'var(--accent2-light)' : soon ? 'var(--warn-light)' : 'transparent' }}>
                             <td style={{ fontWeight: 500 }}>
                               {eq ? (eq.nickname || eq.equipment_name) : 'Unknown'}
                               {rec.is_retraining && <span style={{ marginLeft: 6, fontSize: 10, background: '#0369a1', color: '#fff', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Retraining</span>}
@@ -531,14 +532,12 @@ function EquipmentTraining({ students, session }) {
                             </td>
                             {canEdit(session) && <td><button className="btn btn-sm btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => deleteRecord(rec.id)}>✕</button></td>}
                           </tr>
-                          {/* Retraining required banner */}
                           {retrainReq && (
-                            <tr key={`retrain-notice-${rec.id}`}>
+                            <tr>
                               <td colSpan={canEdit(session) ? 6 : 5} style={{ padding: 0, border: 'none' }}>
                                 <div style={{ background: '#fef3c7', borderTop: '1px solid #f0d070', padding: '8px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
                                   <div style={{ fontSize: 12, color: '#92400e' }}>
-                                    ⚠️ <strong>Retraining required</strong> — not used in 3+ months.
-                                    {retrainReq ? ' Request pending admin approval.' : ''}
+                                    ⚠️ <strong>Retraining required</strong> — not used in 3+ months. Request pending admin approval.
                                   </div>
                                   {canEdit(session) && (
                                     <button className="btn btn-sm btn-primary" style={{ fontSize: 11 }}
@@ -550,12 +549,7 @@ function EquipmentTraining({ students, session }) {
                               </td>
                             </tr>
                           )}
-                          {/* No pending request yet — show request button for students */}
-                          {!retrainReq && !canEdit(session) && (() => {
-                            // Check if this equipment needs retraining (older than 3 months)
-                            // We check via booking_notifications or just show button always for trained equipment
-                            return null // Will be shown via booking page notification
-                          })()}
+                          </React.Fragment>
                         )
                       })}
                     </tbody>
