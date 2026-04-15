@@ -267,7 +267,13 @@ function EquipmentInfo({ equipment, session }) {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{v.title}</div>
                     {v.description && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{v.description}</div>}
-                    {v.video_url && <a href={v.video_url} target="_blank" rel="noopener" style={{ fontSize: 12, color: 'var(--accent)', marginTop: 4, display: 'block' }}>▶ Watch video</a>}
+                    {v.video_url && <a href={v.video_url} target="_blank" rel="noopener"
+                  onClick={async () => {
+                    if (session?.userId) {
+                      await sb.from('equipment_material_progress').upsert({ user_id: session.userId, equipment_id: equipment.id, watched_video: true, updated_at: new Date().toISOString() }, { onConflict: 'user_id,equipment_id' })
+                    }
+                  }}
+                  style={{ fontSize: 12, color: 'var(--accent)', marginTop: 4, display: 'block' }}>▶ Watch video</a>}
                   </div>
                   {canEdit(session) && <button className="btn btn-sm btn-danger" style={{ padding: '3px 8px' }} onClick={() => deleteVideo(v.id)}>✕</button>}
                 </div>
@@ -328,7 +334,12 @@ function EquipmentInfo({ equipment, session }) {
               <div>
                 {sop.title && <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>{sop.title}</div>}
                 <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
-                  {sop.pdf_url && <a href={sop.pdf_url} target="_blank" rel="noopener" className="btn btn-sm">📄 Download SOP PDF</a>}
+                  {sop.pdf_url && <a href={sop.pdf_url} target="_blank" rel="noopener" className="btn btn-sm"
+                    onClick={async () => {
+                      if (session?.userId) {
+                        await sb.from('equipment_material_progress').upsert({ user_id: session.userId, equipment_id: equipment.id, downloaded_sop: true, updated_at: new Date().toISOString() }, { onConflict: 'user_id,equipment_id' })
+                      }
+                    }}>📄 Download SOP PDF</a>}
                   {steps.length > 0 && (
                     <button className="btn btn-sm btn-primary" onClick={() => setSopStep(0)}>
                       📖 View step-by-step ({steps.length} steps)

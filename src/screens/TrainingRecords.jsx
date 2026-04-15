@@ -1,3 +1,4 @@
+import { TrainingRequestsPanel, UserTrainingSchedule, ExamTab } from './TrainingSchedule'
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
@@ -797,6 +798,8 @@ export default function TrainingRecords() {
 
   return (
     <div>
+      {/* Show scheduling info for students */}
+      {session?.role === 'student' && <UserTrainingSchedule session={session} />}
       <div className="section-header">
         <div className="section-title">Training Records</div>
         <div style={{ fontSize: 13, color: 'var(--text2)' }}>{students.length} active student{students.length !== 1 ? 's' : ''}</div>
