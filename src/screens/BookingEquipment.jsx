@@ -409,6 +409,11 @@ function BookingCalendar({ session }) {
   useEffect(() => { loadEquipment(); loadNotifications() }, [])
   useEffect(() => { loadBookings() }, [selectedEq, weekStart, monthDate, calView])
   useEffect(() => { loadBookings() }, [])
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(loadBookings, 30000)
+    return () => clearInterval(interval)
+  }, [selectedEq, weekStart, monthDate, calView])
 
   async function loadEquipment() {
     const { data } = await sb.from('equipment_inventory').select('id, equipment_name, nickname, category, location').eq('is_active', true).order('category').order('nickname')
@@ -433,7 +438,8 @@ function BookingCalendar({ session }) {
       query = query.in('equipment_id', selectedEq)
     }
     const { data } = await query
-    setBookings(data || [])
+    // Show all except cancelled on calendar — cancelled slots are available again
+    setBookings((data || []).filter(b => b.status !== 'cancelled'))
   }
 
   async function loadNotifications() {
