@@ -1,3 +1,4 @@
+import React from 'react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
@@ -234,7 +235,7 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
           const isHalf = slot % 2 === 1
           const label = !isHalf ? (hour === 0 ? '12a' : hour < 12 ? `${hour}a` : hour === 12 ? '12p' : `${hour-12}p`) : ''
           return (
-            <>
+            <React.Fragment key={`slot-${slot}`}>
               <div key={`h${slot}`} style={{ height: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', paddingRight: 4, paddingTop: 1, fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', borderTop: isHalf ? '1px dashed var(--surface2)' : '1px solid var(--border)', background: 'var(--surface)' }}>
                 {label}
               </div>
@@ -273,7 +274,7 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
                   </div>
                 )
               })}
-            </>
+            </React.Fragment>
           )
         })}
       </div>

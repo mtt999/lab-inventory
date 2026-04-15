@@ -270,9 +270,15 @@ function UserProfile({ session }) {
 
   async function load() {
     setLoading(true)
-    const { data } = await sb.from('users').select('*').eq('id', session.userId).single()
-      .catch(() => ({ data: null }))
-    const user = data || (await sb.from('users').select('*').eq('name', session.username).single()).data
+    let user = null
+    if (session.userId) {
+      const { data } = await sb.from('users').select('*').eq('id', session.userId).maybeSingle()
+      user = data
+    }
+    if (!user) {
+      const { data } = await sb.from('users').select('*').eq('name', session.username).maybeSingle()
+      user = data
+    }
     setUser(user)
     if (user) setForm({ name: user.name||'', last_name: user.last_name||'', email: user.email||'', phone: user.phone||'', degree: user.degree||'', year_semester: user.year_semester||'', supervisor: user.supervisor||'', project_group: user.project_group||'', avatar: user.avatar||'', photo_url: user.photo_url||'' })
     setLoading(false)
