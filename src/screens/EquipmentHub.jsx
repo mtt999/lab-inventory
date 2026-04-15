@@ -718,13 +718,22 @@ export default function EquipmentHub() {
   const [search, setSearch] = useState('')
   const [filterCat, setFilterCat] = useState('')
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   async function load() {
     setLoading(true)
     const { data } = await sb.from('equipment_inventory').select('*').eq('is_active', true).order('category').order('equipment_name')
     setEquipment(data || [])
     setLoading(false)
+    // Auto-select equipment if coming from training schedule link
+    const autoSelect = localStorage.getItem('selectEquipment')
+    if (autoSelect) {
+      localStorage.removeItem('selectEquipment')
+      setSelected(data?.find(e => e.id === autoSelect) || null)
+      setSubTab('info')
+    }
   }
 
   const categories = [...new Set(equipment.map(e => e.category).filter(Boolean))]

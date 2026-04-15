@@ -284,7 +284,12 @@ export function UserTrainingSchedule({ session }) {
             <div style={{ fontSize: 13, color: '#1e4d39' }}>
               {fmtDT(sched.confirmed_date)} — Please review the SOP and training videos before your session.
             </div>
-            <a href="#" onClick={e => { e.preventDefault(); useAppStore.getState().setScreen('equipmenthub') }}
+            <a href="#" onClick={e => {
+                e.preventDefault()
+                // Store equipment_id so EquipmentHub auto-selects it
+                localStorage.setItem('selectEquipment', sched.equipment_id)
+                useAppStore.getState().setScreen('equipmenthub')
+              }}
               style={{ fontSize: 13, color: 'var(--accent)', display: 'block', marginTop: 8, textDecoration: 'none', fontWeight: 500 }}>
               → Go to Equipment page to review materials
             </a>
