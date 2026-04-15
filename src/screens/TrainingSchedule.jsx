@@ -449,9 +449,19 @@ export function ExamTab({ session }) {
     setLoading(true)
     const { data: eq } = await sb.from('equipment_inventory').select('id, equipment_name, nickname').eq('is_active', true).order('nickname')
     setEquipment(eq || [])
+
+    // Auto-select from localStorage (coming from Equipment page CTA)
+    const autoEq = localStorage.getItem('examEquipment')
+    if (autoEq) {
+      localStorage.removeItem('examEquipment')
+      setSelectedEq(autoEq)
+      setLoading(false)
+      return
+    }
     // For students, show equipment they're scheduled to train on
     if (!isAdminStaff && session.userId) {
-      const { data: sched } = await sb.from('training_schedule').select('equipment_id').eq('user_id', session.userId).eq('status', 'confirmed')
+      const { data: sched } = await sb.from('training_schedule')
+        .select('equipment_id').eq('user_id', session.userId).eq('status', 'confirmed')
       if (sched?.length) setSelectedEq(sched[0].equipment_id)
     }
     setLoading(false)
@@ -614,33 +624,48 @@ export function ExamTab({ session }) {
               {/* Material progress checklist */}
               {!examMode && !submitted && (
                 <div className="card" style={{ marginBottom: 16 }}>
-                  <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>📚 Pre-exam checklist</div>
-                  <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Complete all steps before taking the exam.</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 0 }}>
-                      <input type="checkbox" checked={progress?.watched_video || false} onChange={() => !progress?.watched_video && markProgress('watched_video')} style={{ width: 'auto' }} />
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>Watched training videos</div>
-                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Go to Equipment page and watch all training videos for this equipment</div>
-                      </div>
-                    </label>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 0 }}>
-                      <input type="checkbox" checked={progress?.downloaded_sop || false} onChange={() => !progress?.downloaded_sop && markProgress('downloaded_sop')} style={{ width: 'auto' }} />
-                      <div>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>Downloaded and read SOP</div>
-                        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Download and read the Standard Operating Procedure PDF</div>
-                      </div>
-                    </label>
+                  <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>📚 Before you start the exam</div>
+                  <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
+                    Confirm you have reviewed all training materials for <strong>{equipment.find(e => e.id === selectedEq)?.nickname || equipment.find(e => e.id === selectedEq)?.equipment_name}</strong>.
                   </div>
 
-                  {progress?.watched_video && progress?.downloaded_sop && questions.length > 0 && (
-                    <div style={{ marginTop: 16, padding: '12px 16px', background: '#e8f2ee', borderRadius: 8, border: '1px solid #9FE1CB' }}>
-                      <div style={{ fontWeight: 600, color: '#1e4d39', marginBottom: 4 }}>✓ Ready for the exam!</div>
-                      <div style={{ fontSize: 13, color: '#1e4d39', marginBottom: 10 }}>You've completed all pre-exam materials. Take the exam when ready — you need 70% to pass.</div>
-                      <button className="btn btn-primary" onClick={() => setExamMode(true)}>📝 Start exam ({questions.length} questions)</button>
+                  {/* Checklist items */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginBottom: 20 }}>
+                    {[
+                      { key: 'watched_video', icon: '🎬', label: 'I have watched the training videos', sub: 'Available in the Equipment page under Training Videos' },
+                      { key: 'downloaded_sop', icon: '📄', label: 'I have read the SOP document', sub: 'Available in the Equipment page under Standard Operating Procedure' },
+                    ].map(item => (
+                      <label key={item.key} onClick={() => !progress?.[item.key] && markProgress(item.key)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 10, border: `2px solid ${progress?.[item.key] ? 'var(--accent)' : 'var(--border)'}`, background: progress?.[item.key] ? 'var(--accent-light)' : 'var(--surface2)', cursor: progress?.[item.key] ? 'default' : 'pointer', transition: 'all 0.2s', marginBottom: 0 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: '50%', background: progress?.[item.key] ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 14 }}>
+                          {progress?.[item.key] ? '✓' : item.icon}
+                        </div>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 14, color: progress?.[item.key] ? 'var(--accent)' : 'var(--text)' }}>{item.label}</div>
+                          {!progress?.[item.key] && <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{item.sub}</div>}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+
+                  {/* Start exam button */}
+                  {progress?.watched_video && progress?.downloaded_sop ? (
+                    questions.length > 0 ? (
+                      <div style={{ textAlign: 'center' }}>
+                        <div style={{ fontSize: 13, color: '#1e4d39', marginBottom: 12 }}>✓ All materials reviewed — you are ready!</div>
+                        <button className="btn btn-primary" style={{ fontSize: 15, padding: '10px 32px' }} onClick={() => setExamMode(true)}>
+                          📝 Start Exam ({questions.length} questions)
+                        </button>
+                        <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 8 }}>Passing score: 70%</div>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 13, color: 'var(--text3)', fontStyle: 'italic', textAlign: 'center' }}>No exam has been set up for this equipment yet. Contact your instructor.</div>
+                    )
+                  ) : (
+                    <div style={{ textAlign: 'center', fontSize: 13, color: 'var(--text3)' }}>
+                      Please confirm both items above to unlock the exam.
                     </div>
                   )}
-                  {questions.length === 0 && <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text3)', fontStyle: 'italic' }}>No exam set up for this equipment yet.</div>}
                 </div>
               )}
 

@@ -766,7 +766,11 @@ export default function TrainingRecords() {
   const { session, toast } = useAppStore()
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [subTab, setSubTab] = useState('fresh')
+  const [subTab, setSubTab] = useState(() => {
+    // Auto-open exam tab if coming from equipment page
+    if (localStorage.getItem('examEquipment')) return 'exam'
+    return 'fresh'
+  })
   const [expiryAlerts, setExpiryAlerts] = useState([])
 
   useEffect(() => { loadStudents(); checkExpiry() }, [])
