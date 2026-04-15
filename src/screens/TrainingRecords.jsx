@@ -252,6 +252,7 @@ function EquipmentTraining({ students, session }) {
   const { toast } = useAppStore()
   const [equipment, setEquipment] = useState([])
   const [records, setRecords] = useState([])
+  const [pendingRetraining, setPendingRetraining] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAddEquip, setShowAddEquip] = useState(false)
   const [newEquip, setNewEquip] = useState({ name: '', description: '' })
