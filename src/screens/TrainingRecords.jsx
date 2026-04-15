@@ -105,7 +105,7 @@ function FreshTraining({ students, session }) {
           <tbody>
             {students.map(u => {
               const rec = getRecord(u.id)
-              const isOwn = session.username === u.name
+              const isOwn = session.userId === u.id || session.username === u.name
               // Students are read-only on Instructions Read — only admin/RE can change it
               const editable = canEdit(session)
               // Students can still upload their own certificate
@@ -264,12 +264,14 @@ function EquipmentTraining({ students, session }) {
 
   async function load() {
     setLoading(true)
-    const [{ data: eq }, { data: rec }] = await Promise.all([
+    const [{ data: eq }, { data: rec }, { data: retrainReqs }] = await Promise.all([
       sb.from('equipment_inventory').select('id, equipment_name, nickname, category, location').eq('is_active', true).order('nickname'),
       sb.from('training_equipment').select('*'),
+      sb.from('retraining_requests').select('*').eq('status', 'pending'),
     ])
     setEquipment(eq || [])
     setRecords(rec || [])
+    setPendingRetraining(retrainReqs || [])
     setLoading(false)
   }
 
@@ -331,6 +333,12 @@ function EquipmentTraining({ students, session }) {
       reader.onerror = () => { toast('Error reading file.'); setImporting(false) }
       reader.readAsBinaryString(file)
     } catch (e) { toast('Import failed.'); setImporting(false) }
+  }
+
+  function getRetrainingInfo(userId, equipmentId) {
+    // Check if user has a pending retraining request for this equipment
+    const req = pendingRetraining.find(r => r.user_id === userId && r.equipment_id === equipmentId)
+    return req || null
   }
 
   async function addTrainingRecord(userId, equipmentId, date, trainedBy, passed) {
@@ -473,12 +481,16 @@ function EquipmentTraining({ students, session }) {
                     </thead>
                     <tbody>
                       {recs.map(rec => {
+                        const retrainReq = getRetrainingInfo(u.id, rec.equipment_id)
                         const eq = equipment.find(e => e.id === rec.equipment_id)
                         const expired = isExpired(rec)
                         const soon = isExpiringSoon(rec)
                         return (
-                          <tr key={rec.id} style={{ background: expired ? 'var(--accent2-light)' : soon ? 'var(--warn-light)' : 'transparent' }}>
-                            <td style={{ fontWeight: 500 }}>{eq ? (eq.nickname || eq.equipment_name) : 'Unknown'}</td>
+                          <tr key={rec.id} style={{ background: rec.is_retraining ? '#e0f2fe' : expired ? 'var(--accent2-light)' : soon ? 'var(--warn-light)' : 'transparent' }}>
+                            <td style={{ fontWeight: 500 }}>
+                              {eq ? (eq.nickname || eq.equipment_name) : 'Unknown'}
+                              {rec.is_retraining && <span style={{ marginLeft: 6, fontSize: 10, background: '#0369a1', color: '#fff', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Retraining</span>}
+                            </td>
                             <td style={{ fontFamily: 'var(--mono)' }}>{rec.trained_date || '—'}</td>
                             <td>{rec.trained_by || '—'}</td>
                             <td>
@@ -511,6 +523,8 @@ function EquipmentTraining({ students, session }) {
               session={session}
               onSave={addTrainingRecord}
               onClose={() => setAddingRecord(null)}
+              defaultEquipmentId={addingRecord.equipmentId}
+              defaultIsRetraining={addingRecord.isRetraining}
             />
           )}
         </div>
@@ -519,12 +533,15 @@ function EquipmentTraining({ students, session }) {
   )
 }
 
-function AddTrainingRecord({ userId, equipment, session, onSave, onClose }) {
-  const [form, setForm] = useState({ equipmentId: '', date: new Date().toISOString().split('T')[0], trainedBy: session.username, passed: false })
+function AddTrainingRecord({ userId, equipment, session, onSave, onClose, defaultEquipmentId, defaultIsRetraining }) {
+  const [form, setForm] = useState({ equipmentId: defaultEquipmentId || '', date: new Date().toISOString().split('T')[0], trainedBy: session.username, passed: false, isRetraining: defaultIsRetraining || false })
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
       <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 24, maxWidth: 400, width: '100%', border: '1px solid var(--border)' }}>
-        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 16 }}>Add equipment training</div>
+        <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>
+          {form.isRetraining ? '🔄 Add retraining record' : 'Add equipment training'}
+        </div>
+        {form.isRetraining && <div style={{ fontSize: 12, color: '#0369a1', background: '#e0f2fe', borderRadius: 6, padding: '6px 10px', marginBottom: 12 }}>This will be recorded as retraining and unblock the equipment for booking.</div>}
         <div className="field"><label>Equipment *</label>
           <select value={form.equipmentId} onChange={e => setForm(f => ({ ...f, equipmentId: e.target.value }))}>
             <option value="">— Select equipment —</option>
@@ -536,13 +553,19 @@ function AddTrainingRecord({ userId, equipment, session, onSave, onClose }) {
           <div className="field"><label>Trained By</label><input value={form.trainedBy} onChange={e => setForm(f => ({ ...f, trainedBy: e.target.value }))} /></div>
         </div>
         <div className="field">
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 0 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 8 }}>
             <input type="checkbox" checked={form.passed} onChange={e => setForm(f => ({ ...f, passed: e.target.checked }))} style={{ width: 'auto' }} />
             Passed exam
           </label>
+          {canEdit(session) && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginBottom: 0 }}>
+              <input type="checkbox" checked={form.isRetraining} onChange={e => setForm(f => ({ ...f, isRetraining: e.target.checked }))} style={{ width: 'auto' }} />
+              <span style={{ color: '#0369a1', fontWeight: 500 }}>🔄 Mark as retraining</span>
+            </label>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          <button className="btn btn-primary" onClick={() => form.equipmentId && onSave(userId, form.equipmentId, form.date, form.trainedBy, form.passed)}>Save</button>
+          <button className="btn btn-primary" onClick={() => form.equipmentId && onSave(userId, form.equipmentId, form.date, form.trainedBy, form.passed, form.isRetraining)}>Save</button>
           <button className="btn" onClick={onClose}>Cancel</button>
         </div>
       </div>
@@ -687,6 +710,7 @@ export default function TrainingRecords() {
     { key: 'golf', label: '2 · Golf Car' },
     { key: 'equipment', label: '3 · Equipment' },
     { key: 'alarm', label: '4 · Building Alarm' },
+
   ]
 
   return (

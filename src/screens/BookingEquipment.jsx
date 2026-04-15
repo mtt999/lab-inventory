@@ -526,10 +526,52 @@ function BookingCalendar({ session }) {
     return () => clearInterval(interval)
   }, [selectedEq, weekStart, monthDate, calView])
 
+  const [retrainingBlocked, setRetrainingBlocked] = useState([]) // equipment IDs blocked for this user
+
   async function loadEquipment() {
     const { data } = await sb.from('equipment_inventory').select('id, equipment_name, nickname, category, location').eq('is_active', true).order('category').order('nickname')
     setEquipment(data || [])
     setLoading(false)
+    // Check retraining blocks for this user
+    await checkRetrainingStatus(data || [])
+  }
+
+  async function checkRetrainingStatus(eqList) {
+    if (!session.userId) return
+    const threeMonthsAgo = new Date()
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3)
+    // Get all confirmed bookings for this user
+    const { data: userBookings } = await sb.from('equipment_bookings')
+      .select('equipment_id, start_time').eq('user_id', session.userId).eq('status', 'confirmed')
+    if (!userBookings?.length) return
+    // Find last booking date per equipment
+    const lastBooked = {}
+    userBookings.forEach(b => {
+      const t = new Date(b.start_time)
+      if (!lastBooked[b.equipment_id] || t > lastBooked[b.equipment_id]) lastBooked[b.equipment_id] = t
+    })
+    // Get retraining requests for this user
+    const { data: retraining } = await sb.from('retraining_requests')
+      .select('equipment_id, status').eq('user_id', session.userId)
+    const approvedEq = new Set((retraining || []).filter(r => r.status === 'approved').map(r => r.equipment_id))
+    const pendingEq = new Set((retraining || []).filter(r => r.status === 'pending').map(r => r.equipment_id))
+    // Block equipment not used in 3 months without approved retraining
+    const blocked = Object.entries(lastBooked)
+      .filter(([eqId, lastDate]) => lastDate < threeMonthsAgo && !approvedEq.has(eqId))
+      .map(([eqId]) => eqId)
+    setRetrainingBlocked(blocked)
+    // Add in-app notification for newly blocked items (not already pending)
+    for (const eqId of blocked) {
+      if (!pendingEq.has(eqId)) {
+        const eq = eqList.find(e => e.id === eqId)
+        if (!eq) continue
+        const msg = `Retraining required: you haven't used ${eq.nickname || eq.equipment_name} in over 3 months.`
+        await sb.from('booking_notifications').insert({
+          booking_id: null, user_id: session.userId,
+          type: 'retraining_required', message: msg, read: false,
+        }).catch(() => {})
+      }
+    }
   }
 
   async function loadBookings() {
@@ -570,7 +612,14 @@ function BookingCalendar({ session }) {
   }
 
   function handleSlotClick(slot) {
-    if (selectedEq.length === 0) return // must select equipment first
+    if (selectedEq.length === 0) return
+    // Check if any selected equipment requires retraining
+    const blockedSelected = selectedEq.filter(id => retrainingBlocked.includes(id))
+    if (blockedSelected.length > 0) {
+      const names = blockedSelected.map(id => equipment.find(e => e.id === id)?.nickname || 'equipment').join(', ')
+      alert(`⚠️ Retraining required\n\n${names} requires retraining before booking. Please go to the Training Records tab and submit a retraining request.`)
+      return
+    }
     setBookingDraft(slot)
     setEditBooking(null)
     setShowBookingModal(true)
@@ -642,8 +691,9 @@ function BookingCalendar({ session }) {
                   {selectedEq.includes(e.id) && <span style={{ color: '#fff', fontSize: 9, fontWeight: 700 }}>✓</span>}
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 12, fontWeight: selectedEq.includes(e.id) ? 600 : 500, color: selectedEq.includes(e.id) ? 'var(--accent)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  <div style={{ fontSize: 12, fontWeight: selectedEq.includes(e.id) ? 600 : 500, color: retrainingBlocked.includes(e.id) ? '#a32d2d' : selectedEq.includes(e.id) ? 'var(--accent)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {e.nickname || e.equipment_name}
+                    {retrainingBlocked.includes(e.id) && <span style={{ marginLeft: 4, fontSize: 9, background: '#fcebeb', color: '#a32d2d', borderRadius: 3, padding: '1px 4px' }}>RETRAIN</span>}
                   </div>
                   {e.location && <div style={{ fontSize: 10, color: 'var(--text3)' }}>{e.location}</div>}
                 </div>
@@ -927,7 +977,10 @@ function BookingHistory({ session }) {
                   const hours = Math.round((new Date(b.end_time) - new Date(b.start_time)) / 360000) / 10
                   return (
                     <tr key={b.id}>
-                      <td style={{ fontWeight: 500 }}>{eq?.nickname || eq?.equipment_name || '—'}</td>
+                      <td style={{ fontWeight: 500 }}>
+                        {eq?.nickname || eq?.equipment_name || '—'}
+                        {b.is_retraining && <span style={{ marginLeft: 6, fontSize: 10, background: '#e0f2fe', color: '#0369a1', borderRadius: 3, padding: '1px 5px', fontWeight: 600 }}>Retraining</span>}
+                      </td>
                       {canEdit(session) && <td style={{ color: 'var(--text2)' }}>{b.booked_on_behalf_of || b.user_name}</td>}
                       <td style={{ color: 'var(--text2)', fontSize: 12 }}>{b.title || '—'}</td>
                       <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtDateTime(b.start_time)}</td>
