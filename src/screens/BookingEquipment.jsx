@@ -75,9 +75,12 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
     if (conflict) { toast('This time slot conflicts with an existing booking.'); return }
     setSaving(true)
     // Check if equipment requires approval for this user
-    const { data: settings } = await sb.from('equipment_booking_settings')
-      .select('requires_approval').eq('equipment_id', form.equipment_id).single()
-    const requiresApproval = settings?.requires_approval && !isAdmin(session)
+    let requiresApproval = false
+    try {
+      const { data: settings } = await sb.from('equipment_booking_settings')
+        .select('requires_approval').eq('equipment_id', form.equipment_id).maybeSingle()
+      requiresApproval = (settings?.requires_approval ?? false) && !isAdmin(session)
+    } catch (e) { requiresApproval = false }
     const payload = {
       equipment_id: form.equipment_id,
       user_id: session.userId,
@@ -200,15 +203,35 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
     let { startDayIdx, startSlot, endDayIdx, endSlot } = drag
     const startCell = cellKey(startDayIdx, startSlot)
     const endCell = cellKey(endDayIdx, endSlot)
+    // Normalize so start is always before end
     if (startCell > endCell) {
       [startDayIdx, startSlot, endDayIdx, endSlot] = [endDayIdx, endSlot, startDayIdx, startSlot]
     }
-    const startHour = Math.floor(startSlot / 2), startMin = (startSlot % 2) * 30
-    const endHour = Math.floor(endSlot / 2), endMin = (endSlot % 2) * 30
-    const start = new Date(days[startDayIdx]); start.setHours(startHour, startMin, 0, 0)
-    const end = new Date(days[endDayIdx]); end.setHours(endHour, endMin + 30, 0, 0)
+    const startHour = Math.floor(startSlot / 2)
+    const startMin = (startSlot % 2) * 30
+    const endSlotNext = endSlot + 1 // add one 30-min block
+    const endHour = Math.floor(endSlotNext / 2)
+    const endMin = (endSlotNext % 2) * 30
+    // Build start time
+    const start = new Date(days[startDayIdx])
+    start.setHours(startHour, startMin, 0, 0)
+    // Build end time — if endSlotNext overflows past 47 (11:30pm slot), go to next day midnight
+    let end
+    if (endSlotNext >= 48) {
+      // End is midnight of the next day
+      end = new Date(days[endDayIdx])
+      end.setHours(24, 0, 0, 0)
+    } else {
+      end = new Date(days[endDayIdx])
+      end.setHours(endHour, endMin, 0, 0)
+    }
     setDrag(null)
-    onSlotClick({ start: start.toISOString().slice(0,16), end: end.toISOString().slice(0,16) })
+    // Format as local datetime string for the form
+    const fmt = d => {
+      const pad = n => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    }
+    onSlotClick({ start: fmt(start), end: fmt(end) })
   }
 
   function isDragHighlighted(dayIdx, slot) {
@@ -222,7 +245,7 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
   return (
     <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 220px)', userSelect: 'none' }}
       onMouseUp={handleMouseUp}
-      onMouseLeave={() => { if (drag) { setDrag(null) } }}>
+      onMouseLeave={e => { if (drag && !e.currentTarget.contains(e.relatedTarget)) setDrag(null) }}>
       <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', minWidth: 500 }}>
         {/* Header */}
         <div style={{ height: 40, borderBottom: '1px solid var(--border)', background: 'var(--surface)' }} />
