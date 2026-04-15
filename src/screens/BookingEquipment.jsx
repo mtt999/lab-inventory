@@ -181,129 +181,203 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
 }
 
 // ── Week View Calendar ────────────────────────────────────────
+// Each slot = 30 min, height = 24px. Total grid height = 48 * 24 = 1152px
+const SLOT_H = 24 // px per 30-min slot
+const TOTAL_H = 48 * SLOT_H // 1152px
+
+function timeToSlotOffset(date) {
+  // Returns pixel offset from top of grid (midnight = 0)
+  return (date.getHours() * 60 + date.getMinutes()) / 30 * SLOT_H
+}
+
+function localFmt(d) {
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook }) {
-  const [drag, setDrag] = useState(null) // { startDay, startHour, endDay, endHour }
+  const [drag, setDrag] = useState(null)
+  const gridRef = useRef(null)
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const today = new Date()
 
-  function cellKey(dayIdx, slot) { return dayIdx * 48 + slot }
+  // Convert mouse Y position within a day column to slot index
+  function yToSlot(y) {
+    return Math.max(0, Math.min(47, Math.floor(y / SLOT_H)))
+  }
 
-  function handleMouseDown(dayIdx, slot) {
+  function getEventFromMouse(e, di) {
+    const col = gridRef.current?.querySelector(`[data-col="${di}"]`)
+    if (!col) return null
+    const rect = col.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    return yToSlot(y)
+  }
+
+  function handleMouseDown(e, di) {
     if (!canBook) return
-    setDrag({ startDayIdx: dayIdx, startSlot: slot, endDayIdx: dayIdx, endSlot: slot })
+    const slot = getEventFromMouse(e, di)
+    if (slot === null) return
+    setDrag({ startDayIdx: di, startSlot: slot, endDayIdx: di, endSlot: slot })
+    e.preventDefault()
   }
 
-  function handleMouseEnter(dayIdx, slot) {
+  function handleMouseMove(e, di) {
     if (!drag) return
-    setDrag(d => ({ ...d, endDayIdx: dayIdx, endSlot: slot }))
+    const slot = getEventFromMouse(e, di)
+    if (slot === null) return
+    setDrag(d => ({ ...d, endDayIdx: di, endSlot: slot }))
   }
 
-  function handleMouseUp() {
+  function handleMouseUp(e) {
     if (!drag) return
     let { startDayIdx, startSlot, endDayIdx, endSlot } = drag
-    const startCell = cellKey(startDayIdx, startSlot)
-    const endCell = cellKey(endDayIdx, endSlot)
-    // Normalize so start is always before end
-    if (startCell > endCell) {
+    // Normalize direction
+    const startAbs = startDayIdx * 48 + startSlot
+    const endAbs = endDayIdx * 48 + endSlot
+    if (startAbs > endAbs) {
       [startDayIdx, startSlot, endDayIdx, endSlot] = [endDayIdx, endSlot, startDayIdx, startSlot]
     }
-    const startHour = Math.floor(startSlot / 2)
-    const startMin = (startSlot % 2) * 30
-    const endSlotNext = endSlot + 1 // add one 30-min block
-    const endHour = Math.floor(endSlotNext / 2)
-    const endMin = (endSlotNext % 2) * 30
-    // Build start time
     const start = new Date(days[startDayIdx])
-    start.setHours(startHour, startMin, 0, 0)
-    // Build end time — if endSlotNext overflows past 47 (11:30pm slot), go to next day midnight
-    let end
-    if (endSlotNext >= 48) {
-      // End is midnight of the next day
-      end = new Date(days[endDayIdx])
-      end.setHours(24, 0, 0, 0)
+    start.setHours(Math.floor(startSlot / 2), (startSlot % 2) * 30, 0, 0)
+    const end = new Date(days[endDayIdx])
+    const endSlotFinal = endSlot + 1
+    if (endSlotFinal >= 48) {
+      // Dragged to end of day — go to midnight of next day
+      end.setDate(end.getDate() + 1)
+      end.setHours(0, 0, 0, 0)
     } else {
-      end = new Date(days[endDayIdx])
-      end.setHours(endHour, endMin, 0, 0)
+      end.setHours(Math.floor(endSlotFinal / 2), (endSlotFinal % 2) * 30, 0, 0)
     }
     setDrag(null)
-    // Format as local datetime string for the form
-    const fmt = d => {
-      const pad = n => String(n).padStart(2, '0')
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-    }
-    onSlotClick({ start: fmt(start), end: fmt(end) })
+    onSlotClick({ start: localFmt(start), end: localFmt(end) })
   }
 
-  function isDragHighlighted(dayIdx, slot) {
+  // Calculate booking position within a specific day column
+  function getBookingSegment(b, dayIdx) {
+    const bStart = new Date(b.start_time)
+    const bEnd = new Date(b.end_time)
+    const dayStart = new Date(days[dayIdx]); dayStart.setHours(0, 0, 0, 0)
+    const dayEnd = new Date(days[dayIdx]); dayEnd.setHours(24, 0, 0, 0)
+
+    // Does this booking overlap with this day?
+    if (bEnd <= dayStart || bStart >= dayEnd) return null
+
+    const segStart = bStart < dayStart ? dayStart : bStart
+    const segEnd = bEnd > dayEnd ? dayEnd : bEnd
+
+    const top = timeToSlotOffset(segStart) + (segStart <= dayStart ? 0 : 0)
+    const segStartMins = (segStart.getHours() * 60 + segStart.getMinutes())
+    const segEndMins = Math.min(24 * 60, segEnd.getHours() * 60 + segEnd.getMinutes() + (segEnd.getDate() > segStart.getDate() ? 24 * 60 : 0))
+    const heightPx = Math.max(22, ((segEndMins - segStartMins) / 30) * SLOT_H - 2)
+    const topPx = (segStartMins / 30) * SLOT_H
+
+    const isStart = sameDay(bStart, days[dayIdx])
+    const isEnd = sameDay(bEnd, days[dayIdx]) || (bEnd <= dayEnd)
+    return { top: topPx, height: heightPx, isStart, isEnd }
+  }
+
+  // Drag highlight: which cells are highlighted
+  function isDragHighlighted(di, slot) {
     if (!drag) return false
-    const cur = cellKey(dayIdx, slot)
-    const a = cellKey(drag.startDayIdx, drag.startSlot)
-    const b = cellKey(drag.endDayIdx, drag.endSlot)
+    const cur = di * 48 + slot
+    const a = drag.startDayIdx * 48 + drag.startSlot
+    const b = drag.endDayIdx * 48 + drag.endSlot
     return cur >= Math.min(a, b) && cur <= Math.max(a, b)
   }
 
   return (
-    <div style={{ overflowY: 'auto', maxHeight: 'calc(100vh - 220px)', userSelect: 'none' }}
+    <div style={{ userSelect: 'none', overflowY: 'auto', maxHeight: 'calc(100vh - 240px)' }}
       onMouseUp={handleMouseUp}
-      onMouseLeave={e => { if (drag && !e.currentTarget.contains(e.relatedTarget)) setDrag(null) }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', minWidth: 500 }}>
-        {/* Header */}
-        <div style={{ height: 40, borderBottom: '1px solid var(--border)', background: 'var(--surface)' }} />
+      onMouseLeave={e => { if (drag && e.target === e.currentTarget) setDrag(null) }}>
+
+      {/* Sticky header row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '2px solid var(--border)' }}>
+        <div style={{ height: 40 }} />
         {days.map((day, i) => (
-          <div key={i} style={{ height: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderBottom: '1px solid var(--border)', borderLeft: '1px solid var(--border)', background: sameDay(day, today) ? 'var(--accent-light)' : 'var(--surface)', position: 'sticky', top: 0, zIndex: 10, borderBottom: '2px solid var(--border)' }}>
+          <div key={i} style={{ height: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderLeft: '1px solid var(--border)', background: sameDay(day, today) ? 'var(--accent-light)' : 'var(--surface)' }}>
             <div style={{ color: 'var(--text3)', fontFamily: 'var(--mono)', fontSize: 10 }}>{DAYS[day.getDay()]}</div>
             <div style={{ fontWeight: sameDay(day, today) ? 700 : 500, fontSize: 13, color: sameDay(day, today) ? 'var(--accent)' : 'var(--text)' }}>{day.getDate()}</div>
           </div>
         ))}
+      </div>
 
-        {/* Half-hour time rows */}
-        {HALF_HOURS.map(slot => {
-          const hour = Math.floor(slot / 2)
-          const isHalf = slot % 2 === 1
-          const label = !isHalf ? (hour === 0 ? '12a' : hour < 12 ? `${hour}a` : hour === 12 ? '12p' : `${hour-12}p`) : ''
-          return (
-            <React.Fragment key={`slot-${slot}`}>
-              <div key={`h${slot}`} style={{ height: 24, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', paddingRight: 4, paddingTop: 1, fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', borderTop: isHalf ? '1px dashed var(--surface2)' : '1px solid var(--border)', background: 'var(--surface)' }}>
-                {label}
-              </div>
-              {days.map((day, di) => {
-                const highlighted = isDragHighlighted(di, slot)
-                // Render bookings starting in this exact slot
-                const startingHere = bookings.filter(b => {
-                  const s = new Date(b.start_time)
-                  const slotHour = Math.floor(slot / 2)
-                  const slotMin = (slot % 2) * 30
-                  return sameDay(s, day) && s.getHours() === slotHour && s.getMinutes() === slotMin
-                })
-                return (
-                  <div key={`${slot}-${di}`}
-                    style={{ height: 24, borderTop: isHalf ? '1px dashed var(--surface2)' : '1px solid var(--border)', borderLeft: '1px solid var(--border)', position: 'relative', background: highlighted ? 'rgba(26,93,56,0.1)' : 'transparent', cursor: canBook ? 'crosshair' : 'default' }}
-                    onMouseDown={() => handleMouseDown(di, slot)}
-                    onMouseEnter={() => handleMouseEnter(di, slot)}>
-                    {startingHere.map(b => {
-                      const startH = new Date(b.start_time)
-                      const endH = new Date(b.end_time)
-                      const dayEnd = new Date(day); dayEnd.setHours(24, 0, 0, 0)
-                      const durationMins = Math.min((endH - startH), (dayEnd - startH)) / 60000
-                      const height = Math.max(22, (durationMins / 30) * 24 - 2)
-                      return (
-                        <div key={b.id}
-                          onClick={e => { e.stopPropagation(); onBookingClick(b) }}
-                          style={{ position: 'absolute', left: 2, right: 2, top: 0, height, background: statusBg[b.status], border: `1px solid ${statusColor[b.status]}50`, borderLeft: `3px solid ${statusColor[b.status]}`, borderRadius: 4, padding: '2px 5px', fontSize: 10, overflow: 'hidden', zIndex: 2, cursor: 'pointer' }}>
-                          <div style={{ fontWeight: 600, color: statusColor[b.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {b.booked_on_behalf_of || b.user_name}
-                          </div>
-                          {height > 30 && b.title && <div style={{ color: statusColor[b.status], opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</div>}
-                          {height > 44 && <div style={{ color: statusColor[b.status], opacity: 0.6, fontSize: 9 }}>{fmtTime(b.start_time)}–{fmtTime(b.end_time)}</div>}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })}
-            </React.Fragment>
-          )
-        })}
+      {/* Grid body */}
+      <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', position: 'relative' }}>
+        {/* Time labels column */}
+        <div style={{ position: 'relative', height: TOTAL_H }}>
+          {HOURS.map(h => (
+            <div key={h} style={{ position: 'absolute', top: h * 2 * SLOT_H, right: 4, fontSize: 9, color: 'var(--text3)', fontFamily: 'var(--mono)', lineHeight: 1 }}>
+              {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h-12}p`}
+            </div>
+          ))}
+        </div>
+
+        {/* Day columns */}
+        {days.map((day, di) => (
+          <div key={di} data-col={di}
+            style={{ position: 'relative', height: TOTAL_H, borderLeft: '1px solid var(--border)', cursor: canBook ? 'crosshair' : 'default' }}
+            onMouseDown={e => handleMouseDown(e, di)}
+            onMouseMove={e => handleMouseMove(e, di)}>
+
+            {/* Hour lines */}
+            {HOURS.map(h => (
+              <React.Fragment key={h}>
+                <div style={{ position: 'absolute', top: h * 2 * SLOT_H, left: 0, right: 0, borderTop: '1px solid var(--border)', pointerEvents: 'none' }} />
+                <div style={{ position: 'absolute', top: h * 2 * SLOT_H + SLOT_H, left: 0, right: 0, borderTop: '1px dashed var(--surface2)', pointerEvents: 'none' }} />
+              </React.Fragment>
+            ))}
+
+            {/* Drag highlight */}
+            {drag && (() => {
+              const startAbs = drag.startDayIdx * 48 + drag.startSlot
+              const endAbs = drag.endDayIdx * 48 + drag.endSlot
+              const minAbs = Math.min(startAbs, endAbs)
+              const maxAbs = Math.max(startAbs, endAbs)
+              const colStart = di * 48
+              const colEnd = di * 48 + 47
+              if (maxAbs < colStart || minAbs > colEnd) return null
+              const visStart = Math.max(minAbs, colStart) - colStart
+              const visEnd = Math.min(maxAbs, colEnd) - colStart
+              const top = visStart * SLOT_H
+              const height = (visEnd - visStart + 1) * SLOT_H
+              return <div style={{ position: 'absolute', top, left: 2, right: 2, height, background: 'rgba(26,93,56,0.15)', borderRadius: 4, pointerEvents: 'none', zIndex: 1 }} />
+            })()}
+
+            {/* Bookings — render segment for this day */}
+            {bookings.map(b => {
+              const seg = getBookingSegment(b, di)
+              if (!seg) return null
+              const br = [
+                seg.isStart ? '4px' : '0',
+                seg.isEnd ? '4px' : '0',
+                seg.isEnd ? '4px' : '0',
+                seg.isStart ? '4px' : '0',
+              ].join(' ')
+              return (
+                <div key={`${b.id}-${di}`}
+                  onClick={e => { e.stopPropagation(); onBookingClick(b) }}
+                  style={{ position: 'absolute', top: seg.top + 1, left: 2, right: 2, height: seg.height, background: statusBg[b.status], border: `1px solid ${statusColor[b.status]}50`, borderLeft: `3px solid ${statusColor[b.status]}`, borderRadius: br, padding: '2px 5px', fontSize: 10, overflow: 'hidden', zIndex: 2, cursor: 'pointer' }}>
+                  {seg.isStart && (
+                    <>
+                      <div style={{ fontWeight: 600, color: statusColor[b.status], overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {b.booked_on_behalf_of || b.user_name}
+                      </div>
+                      {seg.height > 30 && b.title && <div style={{ color: statusColor[b.status], opacity: 0.8, fontSize: 9, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{b.title}</div>}
+                      {seg.height > 44 && <div style={{ color: statusColor[b.status], opacity: 0.6, fontSize: 9 }}>{fmtTime(b.start_time)} →</div>}
+                    </>
+                  )}
+                  {!seg.isStart && seg.height > 20 && (
+                    <div style={{ color: statusColor[b.status], opacity: 0.7, fontSize: 9 }}>↑ cont.</div>
+                  )}
+                  {seg.isEnd && !seg.isStart && seg.height > 20 && (
+                    <div style={{ color: statusColor[b.status], fontSize: 9, position: 'absolute', bottom: 2, left: 5 }}>→ {fmtTime(b.end_time)}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ))}
       </div>
     </div>
   )
