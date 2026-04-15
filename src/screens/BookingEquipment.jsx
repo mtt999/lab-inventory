@@ -625,25 +625,29 @@ function BookingCalendar({ session }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// TAB 2 — HISTORY & MAINTENANCE
+// TAB 2 — HISTORY & USAGE
 // ══════════════════════════════════════════════════════════════
 function BookingHistory({ session }) {
+  const { toast } = useAppStore()
   const [bookings, setBookings] = useState([])
   const [equipment, setEquipment] = useState([])
   const [loading, setLoading] = useState(true)
   const [filterStatus, setFilterStatus] = useState('')
   const [filterEq, setFilterEq] = useState('')
   const [search, setSearch] = useState('')
-  const [filterCat, setFilterCat] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
+  const [timeFrom, setTimeFrom] = useState('')
+  const [timeTo, setTimeTo] = useState('')
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
     const [{ data: eq }, { data: bk }] = await Promise.all([
-      sb.from('equipment_inventory').select('id, equipment_name, nickname').eq('is_active', true).order('nickname'),
-      isAdmin(session)
-        ? sb.from('equipment_bookings').select('*').order('start_time', { ascending: false }).limit(500)
+      sb.from('equipment_inventory').select('id, equipment_name, nickname, category').eq('is_active', true).order('nickname'),
+      canEdit(session)
+        ? sb.from('equipment_bookings').select('*').order('start_time', { ascending: false }).limit(1000)
         : sb.from('equipment_bookings').select('*').eq('user_id', session.userId).order('start_time', { ascending: false })
     ])
     setEquipment(eq || [])
@@ -654,14 +658,62 @@ function BookingHistory({ session }) {
   const filtered = bookings.filter(b => {
     const eq = equipment.find(e => e.id === b.equipment_id)
     const q = search.toLowerCase()
+    const bStart = new Date(b.start_time)
+    // Date range filter
+    if (dateFrom) {
+      const from = new Date(dateFrom); from.setHours(timeFrom ? parseInt(timeFrom.split(':')[0]) : 0, timeFrom ? parseInt(timeFrom.split(':')[1]) : 0, 0, 0)
+      if (bStart < from) return false
+    }
+    if (dateTo) {
+      const to = new Date(dateTo); to.setHours(timeTo ? parseInt(timeTo.split(':')[0]) : 23, timeTo ? parseInt(timeTo.split(':')[1]) : 59, 59, 999)
+      if (bStart > to) return false
+    }
     return (!filterStatus || b.status === filterStatus)
       && (!filterEq || b.equipment_id === filterEq)
       && (!q || [b.user_name, b.title, eq?.nickname, eq?.equipment_name].some(f => f?.toLowerCase().includes(q)))
   })
 
-  // Usage stats per equipment
+  function toCSVRow(cols) {
+    return cols.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')
+  }
+
+  function exportCSV(rows, filename) {
+    const headers = canEdit(session)
+      ? ['Equipment', 'Nickname', 'Category', 'User', 'Purpose', 'Start', 'End', 'Duration (hrs)', 'Status', 'Notes', 'Denied Reason']
+      : ['Equipment', 'Nickname', 'Purpose', 'Start', 'End', 'Duration (hrs)', 'Status']
+    const lines = [headers.join(',')]
+    rows.forEach(b => {
+      const eq = equipment.find(e => e.id === b.equipment_id)
+      const hrs = Math.round((new Date(b.end_time) - new Date(b.start_time)) / 360000) / 10
+      if (canEdit(session)) {
+        lines.push(toCSVRow([eq?.equipment_name||'', eq?.nickname||'', eq?.category||'', b.booked_on_behalf_of||b.user_name, b.title||'', fmtDateTime(b.start_time), fmtDateTime(b.end_time), hrs, b.status, b.notes||'', b.denied_reason||'']))
+      } else {
+        lines.push(toCSVRow([eq?.equipment_name||'', eq?.nickname||'', b.title||'', fmtDateTime(b.start_time), fmtDateTime(b.end_time), hrs, b.status]))
+      }
+    })
+    const blob = new Blob([lines.join('
+')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function exportFiltered() {
+    if (filtered.length === 0) { toast('No records to export.'); return }
+    const eqName = filterEq ? (equipment.find(e => e.id === filterEq)?.nickname || 'equipment') : 'all'
+    const dateStr = dateFrom || new Date().toISOString().split('T')[0]
+    exportCSV(filtered, `bookings_${eqName}_${dateStr}.csv`)
+    toast(`Exported ${filtered.length} records.`)
+  }
+
+  function exportAll() {
+    exportCSV(bookings, `bookings_all_${new Date().toISOString().split('T')[0]}.csv`)
+    toast(`Exported ${bookings.length} total records.`)
+  }
+
+  // Usage stats per equipment from filtered results
   const usageStats = {}
-  bookings.filter(b => b.status === 'confirmed').forEach(b => {
+  filtered.filter(b => b.status === 'confirmed').forEach(b => {
     const eq = equipment.find(e => e.id === b.equipment_id)
     const name = eq?.nickname || eq?.equipment_name || 'Unknown'
     if (!usageStats[name]) usageStats[name] = { count: 0, hours: 0 }
@@ -688,16 +740,49 @@ function BookingHistory({ session }) {
       )}
 
       {/* Filters */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
-        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search…" style={{ flex: 1, minWidth: 160 }} />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 'auto' }}>
-          <option value="">All statuses</option>
-          {['confirmed','pending','denied','cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={filterEq} onChange={e => setFilterEq(e.target.value)} style={{ width: 'auto' }}>
-          <option value="">All equipment</option>
-          {equipment.map(e => <option key={e.id} value={e.id}>{e.nickname || e.equipment_name}</option>)}
-        </select>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 16, marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12, color: 'var(--text2)' }}>🔍 Filter & Export</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search user or equipment…" style={{ flex: 1, minWidth: 160 }} />
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 'auto' }}>
+            <option value="">All statuses</option>
+            {['confirmed','pending','denied','cancelled'].map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select value={filterEq} onChange={e => setFilterEq(e.target.value)} style={{ width: 'auto' }}>
+            <option value="">All equipment</option>
+            {equipment.map(e => <option key={e.id} value={e.id}>{e.nickname || e.equipment_name}</option>)}
+          </select>
+        </div>
+        {/* Date & time range */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12, alignItems: 'center' }}>
+          <div style={{ fontSize: 12, color: 'var(--text3)', fontWeight: 500 }}>Date range:</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ fontSize: 12 }} />
+            <input type="time" value={timeFrom} onChange={e => setTimeFrom(e.target.value)} style={{ fontSize: 12, width: 100 }} />
+          </div>
+          <span style={{ color: 'var(--text3)', fontSize: 13 }}>→</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ fontSize: 12 }} />
+            <input type="time" value={timeTo} onChange={e => setTimeTo(e.target.value)} style={{ fontSize: 12, width: 100 }} />
+          </div>
+          {(dateFrom || dateTo) && <button className="btn btn-sm" onClick={() => { setDateFrom(''); setDateTo(''); setTimeFrom(''); setTimeTo('') }}>Clear</button>}
+        </div>
+        {/* Export buttons */}
+        {canEdit(session) && (
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-sm btn-primary" onClick={exportFiltered}>
+              📥 Export filtered ({filtered.length} records)
+            </button>
+            <button className="btn btn-sm" onClick={exportAll}>
+              📥 Export all ({bookings.length} records)
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Results count */}
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 10 }}>
+        Showing <strong>{filtered.length}</strong> of <strong>{bookings.length}</strong> bookings
       </div>
 
       {loading ? <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
@@ -708,12 +793,13 @@ function BookingHistory({ session }) {
               <thead>
                 <tr>
                   <th>Equipment</th>
-                  {isAdmin(session) && <th>User</th>}
+                  {canEdit(session) && <th>User</th>}
+                  <th>Purpose</th>
                   <th>Start</th>
                   <th>End</th>
                   <th>Duration</th>
                   <th>Status</th>
-                  {isAdmin(session) && <th>Notes</th>}
+                  {canEdit(session) && <th>Notes</th>}
                 </tr>
               </thead>
               <tbody>
@@ -723,12 +809,13 @@ function BookingHistory({ session }) {
                   return (
                     <tr key={b.id}>
                       <td style={{ fontWeight: 500 }}>{eq?.nickname || eq?.equipment_name || '—'}</td>
-                      {isAdmin(session) && <td>{b.booked_on_behalf_of || b.user_name}</td>}
+                      {canEdit(session) && <td style={{ color: 'var(--text2)' }}>{b.booked_on_behalf_of || b.user_name}</td>}
+                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{b.title || '—'}</td>
                       <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtDateTime(b.start_time)}</td>
                       <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{fmtDateTime(b.end_time)}</td>
                       <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{hours}h</td>
                       <td><span style={{ background: statusBg[b.status], color: statusColor[b.status], borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{b.status}</span></td>
-                      {isAdmin(session) && <td style={{ color: 'var(--text3)', fontSize: 12 }}>{b.denied_reason || b.title || '—'}</td>}
+                      {canEdit(session) && <td style={{ color: 'var(--text3)', fontSize: 12, maxWidth: 160 }}>{b.denied_reason || b.notes || '—'}</td>}
                     </tr>
                   )
                 })}
