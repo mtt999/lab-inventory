@@ -57,10 +57,12 @@ function BookingModal({ booking, equipmentList, selectedEquipment, session, onSa
   useEffect(() => { if (form.equipment_id && form.start_time && form.end_time) checkConflict() }, [form.equipment_id, form.start_time, form.end_time])
 
   async function checkConflict() {
+    if (!form.equipment_id || !form.start_time || !form.end_time) return
     const { data } = await sb.from('equipment_bookings')
       .select('*').eq('equipment_id', form.equipment_id)
       .neq('status', 'cancelled').neq('status', 'denied')
       .lt('start_time', form.end_time).gt('end_time', form.start_time)
+    // Exclude the booking being edited AND any booking by the same user that was just cancelled
     const conflicts = (data || []).filter(b => b.id !== booking?.id)
     setConflict(conflicts.length > 0 ? conflicts[0] : null)
   }
@@ -488,8 +490,10 @@ function BookingCalendar({ session }) {
 
   async function handleCancel(booking) {
     if (!confirm('Cancel this booking?')) return
+    setDetailBooking(null) // close modal immediately
     await sb.from('equipment_bookings').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', booking.id)
-    toast('Booking cancelled.'); setDetailBooking(null); loadBookings()
+    toast('Booking cancelled.')
+    loadBookings() // refresh calendar — cancelled slot now free
   }
 
   const filteredEq = equipment.filter(e => {
