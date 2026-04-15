@@ -691,8 +691,7 @@ function BookingHistory({ session }) {
         lines.push(toCSVRow([eq?.equipment_name||'', eq?.nickname||'', b.title||'', fmtDateTime(b.start_time), fmtDateTime(b.end_time), hrs, b.status]))
       }
     })
-    const blob = new Blob([lines.join('
-')], { type: 'text/csv' })
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a'); a.href = url; a.download = filename; a.click()
     URL.revokeObjectURL(url)
