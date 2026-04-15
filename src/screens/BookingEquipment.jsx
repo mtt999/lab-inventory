@@ -401,6 +401,7 @@ function BookingCalendar({ session }) {
   const [editBooking, setEditBooking] = useState(null)
   const [detailBooking, setDetailBooking] = useState(null)
   const [search, setSearch] = useState('')
+  const [filterCat, setFilterCat] = useState('')
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState([])
 
@@ -486,7 +487,8 @@ function BookingCalendar({ session }) {
 
   const filteredEq = equipment.filter(e => {
     const q = search.toLowerCase()
-    return !q || [e.equipment_name, e.nickname, e.category, e.location].some(f => f?.toLowerCase().includes(q))
+    return (!q || [e.equipment_name, e.nickname, e.category, e.location].some(f => f?.toLowerCase().includes(q)))
+      && (!filterCat || e.category === filterCat)
   })
 
   const categories = [...new Set(equipment.map(e => e.category).filter(Boolean))].sort()
@@ -496,8 +498,12 @@ function BookingCalendar({ session }) {
 
       {/* ── Left: equipment selector ── */}
       <div style={{ width: 220, flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search…" style={{ width: '100%', fontSize: 12 }} />
+          <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ width: '100%', fontSize: 12 }}>
+            <option value="">All categories</option>
+            {categories.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
         </div>
         {selectedEq.length > 0 && (
           <div style={{ padding: '6px 12px', background: 'var(--accent-light)', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--accent)', display: 'flex', justifyContent: 'space-between' }}>
@@ -507,13 +513,7 @@ function BookingCalendar({ session }) {
         )}
         <div style={{ maxHeight: 500, overflowY: 'auto' }}>
           {loading ? <div style={{ padding: 16, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-            : categories.map(cat => {
-              const catItems = filteredEq.filter(e => (e.category || 'Other') === cat)
-              if (catItems.length === 0) return null
-              return (
-                <div key={cat}>
-                  <div style={{ padding: '6px 12px 4px', fontSize: 10, fontWeight: 600, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', background: 'var(--surface2)', borderBottom: '0.5px solid var(--border)' }}>{cat}</div>
-                  {catItems.map(e => (
+            : filteredEq.map(e => (
               <div key={e.id} onClick={() => toggleEquipment(e.id)}
                 style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '0.5px solid var(--surface2)', background: selectedEq.includes(e.id) ? 'var(--accent-light)' : 'transparent', display: 'flex', alignItems: 'center', gap: 8 }}
                 onMouseEnter={ev => { if (!selectedEq.includes(e.id)) ev.currentTarget.style.background = 'var(--surface2)' }}
@@ -528,10 +528,7 @@ function BookingCalendar({ session }) {
                   {e.location && <div style={{ fontSize: 10, color: 'var(--text3)' }}>{e.location}</div>}
                 </div>
               </div>
-            ))}
-                </div>
-              )
-            })
+            ))
           }
         </div>
       </div>
@@ -637,6 +634,7 @@ function BookingHistory({ session }) {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterEq, setFilterEq] = useState('')
   const [search, setSearch] = useState('')
+  const [filterCat, setFilterCat] = useState('')
 
   useEffect(() => { load() }, [])
 
