@@ -197,61 +197,74 @@ function localFmt(d) {
 
 function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook }) {
   const [drag, setDrag] = useState(null)
-  const gridRef = useRef(null)
+  const colRefs = useRef([])
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const today = new Date()
 
-  // Convert mouse Y position within a day column to slot index
   function yToSlot(y) {
     return Math.max(0, Math.min(47, Math.floor(y / SLOT_H)))
   }
 
-  function getEventFromMouse(e, di) {
-    const col = gridRef.current?.querySelector(`[data-col="${di}"]`)
-    if (!col) return null
-    const rect = col.getBoundingClientRect()
-    const y = e.clientY - rect.top
-    return yToSlot(y)
+  function getDayAndSlotFromMouse(e) {
+    for (let di = 0; di < 7; di++) {
+      const col = colRefs.current[di]
+      if (!col) continue
+      const rect = col.getBoundingClientRect()
+      if (e.clientX >= rect.left && e.clientX <= rect.right) {
+        const y = e.clientY - rect.top
+        const slot = yToSlot(y)
+        return { di, slot }
+      }
+    }
+    return null
   }
 
   function handleMouseDown(e, di) {
     if (!canBook) return
-    const slot = getEventFromMouse(e, di)
-    if (slot === null) return
+    const col = colRefs.current[di]
+    if (!col) return
+    const rect = col.getBoundingClientRect()
+    const slot = yToSlot(e.clientY - rect.top)
     setDrag({ startDayIdx: di, startSlot: slot, endDayIdx: di, endSlot: slot })
     e.preventDefault()
   }
 
-  function handleMouseMove(e, di) {
-    if (!drag) return
-    const slot = getEventFromMouse(e, di)
-    if (slot === null) return
-    setDrag(d => ({ ...d, endDayIdx: di, endSlot: slot }))
-  }
-
-  function handleMouseUp(e) {
-    if (!drag) return
-    let { startDayIdx, startSlot, endDayIdx, endSlot } = drag
-    // Normalize direction
-    const startAbs = startDayIdx * 48 + startSlot
-    const endAbs = endDayIdx * 48 + endSlot
-    if (startAbs > endAbs) {
-      [startDayIdx, startSlot, endDayIdx, endSlot] = [endDayIdx, endSlot, startDayIdx, startSlot]
+  // Use global mousemove so drag works across columns
+  useEffect(() => {
+    function onMouseMove(e) {
+      if (!drag) return
+      const result = getDayAndSlotFromMouse(e)
+      if (!result) return
+      setDrag(d => ({ ...d, endDayIdx: result.di, endSlot: result.slot }))
     }
-    const start = new Date(days[startDayIdx])
-    start.setHours(Math.floor(startSlot / 2), (startSlot % 2) * 30, 0, 0)
-    const end = new Date(days[endDayIdx])
-    const endSlotFinal = endSlot + 1
-    if (endSlotFinal >= 48) {
-      // Dragged to end of day — go to midnight of next day
-      end.setDate(end.getDate() + 1)
-      end.setHours(0, 0, 0, 0)
-    } else {
-      end.setHours(Math.floor(endSlotFinal / 2), (endSlotFinal % 2) * 30, 0, 0)
+    function onMouseUp(e) {
+      if (!drag) return
+      let { startDayIdx, startSlot, endDayIdx, endSlot } = drag
+      const startAbs = startDayIdx * 48 + startSlot
+      const endAbs = endDayIdx * 48 + endSlot
+      if (startAbs > endAbs) {
+        [startDayIdx, startSlot, endDayIdx, endSlot] = [endDayIdx, endSlot, startDayIdx, startSlot]
+      }
+      const start = new Date(days[startDayIdx])
+      start.setHours(Math.floor(startSlot / 2), (startSlot % 2) * 30, 0, 0)
+      const end = new Date(days[endDayIdx])
+      const endSlotFinal = endSlot + 1
+      if (endSlotFinal >= 48) {
+        end.setDate(end.getDate() + 1)
+        end.setHours(0, 0, 0, 0)
+      } else {
+        end.setHours(Math.floor(endSlotFinal / 2), (endSlotFinal % 2) * 30, 0, 0)
+      }
+      setDrag(null)
+      onSlotClick({ start: localFmt(start), end: localFmt(end) })
     }
-    setDrag(null)
-    onSlotClick({ start: localFmt(start), end: localFmt(end) })
-  }
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [drag])
 
   // Calculate booking position within a specific day column
   function getBookingSegment(b, dayIdx) {
@@ -287,9 +300,7 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
   }
 
   return (
-    <div style={{ userSelect: 'none', overflowY: 'auto', maxHeight: 'calc(100vh - 240px)' }}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={e => { if (drag && e.target === e.currentTarget) setDrag(null) }}>
+    <div style={{ userSelect: 'none', overflowY: 'auto', maxHeight: 'calc(100vh - 240px)' }}>
 
       {/* Sticky header row */}
       <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '2px solid var(--border)' }}>
@@ -315,10 +326,9 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
 
         {/* Day columns */}
         {days.map((day, di) => (
-          <div key={di} data-col={di}
+          <div key={di} ref={el => colRefs.current[di] = el}
             style={{ position: 'relative', height: TOTAL_H, borderLeft: '1px solid var(--border)', cursor: canBook ? 'crosshair' : 'default' }}
-            onMouseDown={e => handleMouseDown(e, di)}
-            onMouseMove={e => handleMouseMove(e, di)}>
+            onMouseDown={e => handleMouseDown(e, di)}>
 
             {/* Hour lines */}
             {HOURS.map(h => (
