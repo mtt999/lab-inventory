@@ -383,6 +383,25 @@ function EquipmentInfo({ equipment, session }) {
       {!restrictedContent && (
         <SOPNotes equipment={equipment} session={session} />
       )}
+
+      {/* ── Exam CTA (students with access only) ── */}
+      {!restrictedContent && !canEdit(session) && (
+        <div className="card" style={{ textAlign: 'center', padding: 32, background: 'linear-gradient(135deg, var(--accent-light) 0%, var(--surface) 100%)', border: '2px solid var(--accent)' }}>
+          <div style={{ fontSize: 52, marginBottom: 10 }}>📝</div>
+          <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 8 }}>Ready to take the exam?</div>
+          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
+            Once you have watched the training videos and reviewed the SOP,<br />
+            start the exam for <strong>{equipment.nickname || equipment.equipment_name}</strong>.
+          </div>
+          <button className="btn btn-primary" style={{ fontSize: 15, padding: '10px 32px' }}
+            onClick={() => {
+              localStorage.setItem('examEquipment', equipment.id)
+              useAppStore.getState().setScreen('training')
+            }}>
+            Start Exam →
+          </button>
+        </div>
+      )}
     </div>
   )
 }
