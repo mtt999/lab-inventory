@@ -793,7 +793,8 @@ export default function TrainingRecords() {
     { key: 'golf', label: '2 · Golf Car' },
     { key: 'equipment', label: '3 · Equipment' },
     { key: 'alarm', label: '4 · Building Alarm' },
-
+    ...(canEdit(session) ? [{ key: 'requests', label: '📋 Training Requests' }] : []),
+    { key: 'exam', label: '📝 Exam' },
   ]
 
   return (
@@ -828,20 +829,27 @@ export default function TrainingRecords() {
         ))}
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-      ) : students.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">👥</div>
-          <div>No students yet. Add students in Admin → Students.</div>
-        </div>
-      ) : (
-        <div>
-          {subTab === 'fresh' && <FreshTraining students={students} session={session} />}
-          {subTab === 'golf' && <GolfCarTraining students={students} session={session} />}
-          {subTab === 'equipment' && <EquipmentTraining students={students} session={session} />}
-          {subTab === 'alarm' && <BuildingAlarm students={students} session={session} />}
-        </div>
+      {/* Tabs that don't need student list */}
+      {subTab === 'requests' && <TrainingRequestsPanel session={session} />}
+      {subTab === 'exam' && <ExamTab session={session} />}
+
+      {/* Tabs that need student list */}
+      {!['requests','exam'].includes(subTab) && (
+        loading ? (
+          <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+        ) : students.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">👥</div>
+            <div>No students yet. Add students in Admin → Students.</div>
+          </div>
+        ) : (
+          <div>
+            {subTab === 'fresh' && <FreshTraining students={students} session={session} />}
+            {subTab === 'golf' && <GolfCarTraining students={students} session={session} />}
+            {subTab === 'equipment' && <EquipmentTraining students={students} session={session} />}
+            {subTab === 'alarm' && <BuildingAlarm students={students} session={session} />}
+          </div>
+        )
       )}
     </div>
   )
