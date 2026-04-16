@@ -36,10 +36,14 @@ function AdminProfile() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}><div className="section-title">Profile & Management</div><HelpPanel screen="profile" /></div>
 
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24 }}>
-        {[{ key: 'admin', label: '🔑 Admin Settings' }, { key: 'students', label: '👥 Students' }].map(t => (
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
+        {[
+          { key: 'admin',    label: '🔑 Admin Settings' },
+          { key: 'students', label: '👥 Students' },
+          { key: 'staff',    label: '👨‍💼 Staff & Access' },
+        ].map(t => (
           <button key={t.key} onClick={() => setAdminTab(t.key)}
-            style={{ padding: '10px 24px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: adminTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${adminTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s' }}>
+            style={{ padding: '10px 24px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: adminTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${adminTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
             {t.label}
           </button>
         ))}
@@ -47,7 +51,7 @@ function AdminProfile() {
 
       {adminTab === 'admin' && <AdminSettings session={session} toast={toast} />}
       {adminTab === 'students' && <StudentsPanel toast={toast} session={session} />}
-      {adminTab === 'access' && <AccessControl toast={toast} session={session} />}
+      {adminTab === 'staff' && <AccessControl toast={toast} session={session} />}
     </div>
   )
 }
