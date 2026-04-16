@@ -25,7 +25,7 @@ export default function Login() {
     // Check users table
     const { data: users } = await sb.from('users')
       .select('*').eq('is_active', true)
-      .or(`email.eq.${emailLower}`)
+      .eq('email', emailLower)
 
     const user = users?.[0]
 
@@ -64,9 +64,9 @@ export default function Login() {
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
           <div style={{ fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 28, letterSpacing: '-1px', color: 'var(--accent)', marginBottom: 6 }}>
-            ICT-<span style={{ color: 'var(--text3)' }}>Lab</span>
+  Intele<span style={{ color: 'var(--text3)' }}>Lab</span>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text3)' }}>I-Lab for ICT</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)' }}>I-Lab for Illinois Center for Transportation (UIUC-ICT)</div>
         </div>
 
         <div className="card" style={{ padding: 32 }}>
