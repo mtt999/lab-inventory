@@ -1,3 +1,4 @@
+import HelpPanel from '../components/HelpPanel'
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
@@ -968,7 +969,10 @@ export default function EquipmentInventory() {
 
   return (
     <div>
-      <div className="section-title" style={{ marginBottom: 20 }}>Equipment Inventory</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div className="section-title">Equipment Inventory</div>
+        <HelpPanel screen="equipment" />
+      </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>

@@ -1,3 +1,4 @@
+import HelpPanel from '../components/HelpPanel'
 import React from 'react'
 import { TrainingRequestsPanel, UserTrainingSchedule, ExamTab } from './TrainingSchedule'
 import { useState, useEffect, useRef } from 'react'
@@ -807,7 +808,10 @@ export default function TrainingRecords() {
       {/* Show scheduling info for students */}
       {session?.role === 'student' && <UserTrainingSchedule session={session} />}
       <div className="section-header">
-        <div className="section-title">Training Records</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div className="section-title">Training Records</div>
+          <HelpPanel screen="training" />
+        </div>
         <div style={{ fontSize: 13, color: 'var(--text2)' }}>{students.length} active student{students.length !== 1 ? 's' : ''}</div>
       </div>
 

@@ -1,3 +1,4 @@
+import HelpPanel from '../components/HelpPanel'
 import React from 'react'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { sb } from '../lib/supabase'
@@ -1116,7 +1117,10 @@ export default function BookingEquipment() {
 
   return (
     <div>
-      <div className="section-title" style={{ marginBottom: 20 }}>Booking Equipment</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div className="section-title">Booking Equipment</div>
+        <HelpPanel screen="booking" />
+      </div>
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}

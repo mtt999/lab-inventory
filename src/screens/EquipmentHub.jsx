@@ -1,3 +1,4 @@
+import HelpPanel from '../components/HelpPanel'
 import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'

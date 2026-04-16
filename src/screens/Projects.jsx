@@ -1,3 +1,4 @@
+import HelpPanel from '../components/HelpPanel'
 import { useState, useEffect } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
@@ -404,8 +405,9 @@ export default function Projects() {
   return (
     <div>
       {/* ── Header ── */}
-      <div className="section-header">
+      <div className="section-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div className="section-title">Projects</div>
+        <HelpPanel screen="projects" />
         <button className="btn btn-sm btn-purple" onClick={() => setShowNewModal(true)}>+ New project</button>
       </div>
 

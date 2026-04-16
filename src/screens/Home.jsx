@@ -1,3 +1,4 @@
+import HelpPanel from '../components/HelpPanel'
 import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '../store/useAppStore'
 import { sb } from '../lib/supabase'
@@ -572,7 +573,7 @@ export default function Home() {
   return (
     <div>
       <div className="section-header">
-        <div className="section-title">Supply Inventory</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><div className="section-title">Supply Inventory</div><HelpPanel screen="home" /></div>
       </div>
 
       {showReminder && (

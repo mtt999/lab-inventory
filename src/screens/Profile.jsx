@@ -1,3 +1,4 @@
+import HelpPanel from '../components/HelpPanel'
 import { useAppStore } from '../store/useAppStore'
 import { sb } from '../lib/supabase'
 import { useState, useEffect, useRef } from 'react'
@@ -33,7 +34,7 @@ function AdminProfile() {
 
   return (
     <div>
-      <div className="section-title" style={{ marginBottom: 20 }}>Profile & Management</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}><div className="section-title">Profile & Management</div><HelpPanel screen="profile" /></div>
 
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24 }}>
         {[{ key: 'admin', label: '🔑 Admin Settings' }, { key: 'students', label: '👥 Students' }].map(t => (
@@ -411,7 +412,7 @@ function UserProfile({ session }) {
 
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
-      <div className="section-title" style={{ marginBottom: 20 }}>My Profile</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}><div className="section-title">My Profile</div><HelpPanel screen="profile" /></div>
 
       {/* Header card */}
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
