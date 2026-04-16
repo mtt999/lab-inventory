@@ -15,6 +15,7 @@ function getModules(role) {
     { key: 'mileage',     screen: null,          label: 'Mileage Form',       sub: 'Submit mileage reimbursement',  icon: '🚗', bg: '#fdf0ed', color: '#c84b2f', external: true },
     { key: 'profile',     screen: 'profile',     label: 'Profile',            sub: 'Your info & settings',          icon: '👤', bg: '#f3eeff', color: '#7c4dbd' },
   ]
+  if (role === 'admin') return all.filter(m => m.key !== 'mileage')
   if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub','booking','mileage'].includes(m.key))
   return all
 }
@@ -42,7 +43,7 @@ function ExternalLinkModal({ url, onConfirm, onCancel }) {
 }
 
 // ── Card Grid View ────────────────────────────────────────────
-function CardGridView({ modules, onNavigate, mileageUrl }) {
+function CardGridView({ modules, onNavigate, mileageUrl, isAdmin, onEditUrl }) {
   const [confirmMileage, setConfirmMileage] = useState(false)
   return (
     <>
@@ -53,14 +54,24 @@ function CardGridView({ modules, onNavigate, mileageUrl }) {
             style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '22px 18px', cursor: 'pointer', transition: 'all 0.15s', position: 'relative' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = m.color; e.currentTarget.style.transform = 'translateY(-2px)' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}>
-            {m.external && (
-              <div style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, color: 'var(--text3)' }}>↗</div>
-            )}
+            {m.external && <div style={{ position: 'absolute', top: 10, right: 10, fontSize: 11, color: 'var(--text3)' }}>↗</div>}
             <div style={{ width: 44, height: 44, borderRadius: 12, background: m.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, fontSize: 22 }}>{m.icon}</div>
             <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>{m.label}</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>{m.sub}</div>
           </div>
         ))}
+        {/* Admin-only: Mileage management card */}
+        {isAdmin && (
+          <div onClick={onEditUrl}
+            style={{ background: 'var(--surface)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-lg)', padding: '22px 18px', cursor: 'pointer', transition: 'all 0.15s' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#c84b2f'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fdf0ed', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, fontSize: 22 }}>🚗</div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>Mileage Form</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>Manage external link</div>
+            <div style={{ marginTop: 8, fontSize: 11, color: '#c84b2f', fontWeight: 500 }}>⚙ Edit URL</div>
+          </div>
+        )}
       </div>
       {confirmMileage && (
         <ExternalLinkModal
@@ -229,13 +240,7 @@ export default function Dashboard() {
           <div style={{ fontSize: 13, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{dateStr} · ICT Lab</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {/* Admin: mileage URL setting */}
-          {isAdmin && (
-            <button className="btn btn-sm" onClick={() => { setEditingUrl(true); setUrlInput(mileageUrl) }}
-              title="Edit Mileage Form URL" style={{ fontSize: 12 }}>
-              🔗 Mileage URL
-            </button>
-          )}
+
           <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: 3, gap: 2 }}>
             <button onClick={() => switchView('grid')}
               style={{ padding: '6px 14px', border: 'none', borderRadius: 8, fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: view === 'grid' ? 'var(--surface)' : 'transparent', color: view === 'grid' ? 'var(--text)' : 'var(--text2)', transition: 'all 0.15s' }}>
@@ -251,7 +256,7 @@ export default function Dashboard() {
 
       {/* View */}
       {view === 'grid'
-        ? <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} />
+        ? <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} isAdmin={isAdmin} onEditUrl={() => { setEditingUrl(true); setUrlInput(mileageUrl) }} />
         : <DashboardView modules={modules} onNavigate={s => setScreen(s)} session={session} mileageUrl={mileageUrl} />
       }
 
