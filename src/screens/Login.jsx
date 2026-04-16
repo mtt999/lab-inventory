@@ -66,7 +66,7 @@ export default function Login() {
           <div style={{ fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 28, letterSpacing: '-1px', color: 'var(--accent)', marginBottom: 6 }}>
             ICT-<span style={{ color: 'var(--text3)' }}>Lab</span>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text3)' }}>Illinois Center for Transportation · UIUC</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)' }}>I-Lab for ICT</div>
         </div>
 
         <div className="card" style={{ padding: 32 }}>
@@ -121,9 +121,10 @@ export default function Login() {
 
         {/* Copyright */}
         <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'var(--text3)', lineHeight: 1.8 }}>
-          <div>© {new Date().getFullYear()} ICT-Lab · Illinois Center for Transportation</div>
-          <div style={{ fontWeight: 500, color: 'var(--text2)' }}>Developed by Mohsen Motlagh</div>
-          <div>University of Illinois Urbana-Champaign</div>
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text2)' }}>InteleLab (I-Lab)</div>
+          <div>I-Lab for ICT</div>
+          <div style={{ fontWeight: 500, color: 'var(--text2)', marginTop: 4 }}>App developed by Mohsen Motlagh</div>
+          <div>© {new Date().getFullYear()} All rights reserved</div>
         </div>
       </div>
     </div>

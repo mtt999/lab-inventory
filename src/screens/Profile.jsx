@@ -112,19 +112,29 @@ function StudentsPanel({ toast }) {
   const [importing, setImporting] = useState(false)
   const fileRef = useRef(null)
 
-  useEffect(() => { loadStudents() }, [])
+  const [supervisors, setSupervisors] = useState([])
+
+  useEffect(() => { loadStudents(); loadSupervisors() }, [])
 
   async function loadStudents() {
     setLoading(true)
-    const { data } = await sb.from('users').select('*').eq('role', 'student').order('name')
+    const { data } = await sb.from('users').select('*').order('role').order('name')
     setStudents(data || [])
     setLoading(false)
+  }
+
+  async function loadSupervisors() {
+    // Supervisors = staff (user) + admin roles
+    const { data } = await sb.from('users').select('id, name').in('role', ['user','admin']).eq('is_active', true).order('name')
+    setSupervisors(data || [])
   }
 
   async function saveStudent(form, id) {
     if (!form.name.trim()) { toast('Name is required.'); return }
     if (!id && !form.password) { toast('Password is required.'); return }
-    const payload = { name: form.name.trim(), email: form.email||null, phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null, supervisor: form.supervisor||null, project_group: form.project_group||null, role: form.admin_level >= 1 ? 'admin' : 'user', is_active: true, admin_level: form.admin_level||0 }
+    const adminLv = parseInt(form.admin_level)||0
+    const role = adminLv >= 1 ? 'admin' : adminLv === -1 ? 'user' : 'student'
+    const payload = { name: form.name.trim(), email: form.email||null, phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null, supervisor: form.supervisor||null, project_group: form.project_group||null, role, is_active: true, admin_level: Math.max(0,adminLv) }
     if (form.password) payload.password = form.password
     if (id) await sb.from('users').update(payload).eq('id', id)
     else await sb.from('users').insert(payload)
@@ -211,7 +221,9 @@ function StudentsPanel({ toast }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
                 <div style={{ fontWeight: 600 }}>{s.name}
-                  {s.admin_level >= 1 && <span style={{ marginLeft: 8, fontSize: 11, background: '#e0f2fe', color: '#0369a1', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Admin {s.admin_level}</span>}
+                  {s.role === 'admin' && <span style={{ marginLeft: 8, fontSize: 11, background: '#e0f2fe', color: '#0369a1', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Admin {s.admin_level || ''}</span>}
+                  {s.role === 'user' && <span style={{ marginLeft: 8, fontSize: 11, background: '#f3eeff', color: '#7c4dbd', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Staff/RE</span>}
+                  {s.role === 'student' && <span style={{ marginLeft: 8, fontSize: 11, background: 'var(--surface2)', color: 'var(--text3)', borderRadius: 3, padding: '1px 6px' }}>Student</span>}
                   {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
@@ -232,16 +244,30 @@ function StudentsPanel({ toast }) {
       }
 
       {showModal && (
-        <StudentModal student={editStudent} onClose={() => { setShowModal(false); setEditStudent(null) }} onSave={saveStudent} />
+        <StudentModal student={editStudent} supervisors={supervisors} onClose={() => { setShowModal(false); setEditStudent(null) }} onSave={saveStudent} />
       )}
     </div>
   )
 }
 
-function StudentModal({ student, onClose, onSave }) {
+function SupervisorSelect({ value, onChange }) {
+  const [supervisors, setSupervisors] = useState([])
+  useEffect(() => {
+    sb.from('users').select('id, name').in('role', ['user','admin']).eq('is_active', true).order('name')
+      .then(({ data }) => setSupervisors(data || []))
+  }, [])
+  return (
+    <select value={value||''} onChange={e => onChange(e.target.value)}>
+      <option value="">— Select supervisor —</option>
+      {supervisors.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+    </select>
+  )
+}
+
+function StudentModal({ student, onClose, onSave, supervisors = [] }) {
   const [form, setForm] = useState(student
-    ? { name: student.name||'', password:'', email: student.email||'', phone: student.phone||'', degree: student.degree||'', year_semester: student.year_semester||'', supervisor: student.supervisor||'', project_group: student.project_group||'', admin_level: student.admin_level||0 }
-    : { name:'', password:'', email:'', phone:'', degree:'', year_semester:'', supervisor:'', project_group:'', admin_level:0 })
+    ? { name: student.name||'', password:'', email: student.email||'', phone: student.phone||'', degree: student.degree||'', year_semester: student.year_semester||'', supervisor: student.supervisor||'', project_group: student.project_group||'', admin_level: student.admin_level||0, role: student.role||'student' }
+    : { name:'', password:'', email:'', phone:'', degree:'', year_semester:'', supervisor:'', project_group:'', admin_level:0, role:'student' })
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:520, width:'100%', maxHeight:'90vh', overflowY:'auto', border:'1px solid var(--border)' }}>
@@ -253,8 +279,9 @@ function StudentModal({ student, onClose, onSave }) {
         <div className="grid-2">
           <div className="field"><label>Password{student?' (leave blank to keep)':' *'}</label><input type="text" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="Min. 6 chars" /></div>
           <div className="field"><label>Admin Level</label>
-            <select value={form.admin_level||0} onChange={e=>setForm(f=>({...f,admin_level:parseInt(e.target.value)}))}>
-              <option value={0}>Staff / Student (0)</option>
+            <select value={form.admin_level||0} onChange={e=>setForm(f=>({...f,admin_level:parseInt(e.target.value),role:parseInt(e.target.value)>=1?'admin':f.role}))}>
+              <option value={0}>Student</option>
+              <option value={-1}>Staff / RE</option>
               <option value={1}>Admin 1</option>
               <option value={2}>Admin 2</option>
             </select>
@@ -274,7 +301,12 @@ function StudentModal({ student, onClose, onSave }) {
           <div className="field"><label>Year & Semester Entered</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
         </div>
         <div className="grid-2">
-          <div className="field"><label>Supervisor</label><input value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} /></div>
+          <div className="field"><label>Supervisor</label>
+            <select value={form.supervisor||''} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))}>
+              <option value="">— Select supervisor —</option>
+              {supervisors.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+          </div>
           <div className="field"><label>Project Group</label>
             <select value={form.project_group} onChange={e=>setForm(f=>({...f,project_group:e.target.value}))}>
               <option value="">— Select —</option>
@@ -426,7 +458,7 @@ function UserProfile({ session }) {
                 {DEGREES.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
-            <div className="field"><label>Semester & Year Entered UIUC</label>
+            <div className="field"><label>Semester & Year Started</label>
               <div style={{ display: 'flex', gap: 8 }}>
                 <select value={(form.year_semester||'').split(' ')[0]||''} onChange={e => { const yr = (form.year_semester||'').split(' ')[1]||''; setForm(f => ({ ...f, year_semester: `${e.target.value} ${yr}`.trim() })) }} style={{ flex: 1 }}>
                   <option value="">Sem</option>{SEMESTERS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -438,7 +470,9 @@ function UserProfile({ session }) {
             </div>
           </div>
           <div className="grid-2">
-            <div className="field"><label>Supervisor</label><input value={form.supervisor} onChange={e => setForm(f => ({ ...f, supervisor: e.target.value }))} /></div>
+            <div className="field"><label>Supervisor</label>
+              <SupervisorSelect value={form.supervisor} onChange={v => setForm(f => ({ ...f, supervisor: v }))} />
+            </div>
             <div className="field"><label>Project Group</label>
               <select value={form.project_group} onChange={e => setForm(f => ({ ...f, project_group: e.target.value }))}>
                 <option value="">— Select —</option>

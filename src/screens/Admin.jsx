@@ -807,7 +807,7 @@ function StudentModal({ student, onClose, onSave }) {
               {DEGREES.map(d=><option key={d} value={d}>{d}</option>)}
             </select>
           </div>
-          <div className="field"><label>Year & Semester Entered UIUC</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
+          <div className="field"><label>Year & Semester Started</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
         </div>
         <div className="grid-2">
           <div className="field"><label>Supervisor</label><input value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} placeholder="e.g. Dr. Smith" /></div>
