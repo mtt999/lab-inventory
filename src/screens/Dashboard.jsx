@@ -14,10 +14,11 @@ function getModules(role) {
     { key: 'booking',     screen: 'booking',     label: 'Booking Equipment',  sub: 'Reserve lab equipment',         icon: '📅', bg: '#e0f2fe', color: '#0369a1' },
     { key: 'mileage',     screen: null,          label: 'Mileage Form',       sub: 'Submit mileage reimbursement',  icon: '🚗', bg: '#fdf0ed', color: '#c84b2f', external: true },
     { key: 'labsafety',   screen: null,          label: 'Lab Safety',         sub: 'Safety training & certification', icon: '🦺', bg: '#fef3c7', color: '#92400e', external: true, urlKey: 'labsafety_url' },
+    { key: 'remessages',  screen: 'remessages',  label: 'Research Engineers', sub: 'Notes, ideas & issue reports',  icon: '💬', bg: '#e8f2ee', color: '#2a6049' },
     { key: 'profile',     screen: 'profile',     label: 'Profile',            sub: 'Your info & settings',          icon: '👤', bg: '#f3eeff', color: '#7c4dbd' },
   ]
   if (role === 'admin') return all.filter(m => !m.external)
-  if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub','booking','mileage','labsafety'].includes(m.key))
+  if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub','booking','mileage','labsafety','remessages'].includes(m.key))
   return all
 }
 
