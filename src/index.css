@@ -136,8 +136,85 @@ tr:last-child td { border-bottom: none; }
 .pin-key:active { transform: scale(0.93); background: var(--accent-light); }
 
 /* ── Responsive ── */
-@media (max-width: 500px) {
+@media (max-width: 768px) {
+  /* Base */
+  body { font-size: 14px; }
+  .card { padding: 16px; }
+  .section-title { font-size: 17px; }
   .grid-2 { grid-template-columns: 1fr; }
   .room-grid { grid-template-columns: repeat(2, 1fr); }
   .admin-tab { padding: 8px 10px; font-size: 12px; }
+
+  /* Tables — make scrollable */
+  table { font-size: 12px; }
+  th, td { padding: 8px 6px; }
+
+  /* Layout main padding */
+  main { padding: 16px 12px !important; }
+
+  /* Header */
+  header { padding: 0 12px !important; }
+
+  /* Booking Equipment — stack left panel above calendar */
+  .booking-layout {
+    flex-direction: column !important;
+  }
+  .booking-equipment-panel {
+    width: 100% !important;
+    max-height: 200px !important;
+  }
+  .booking-calendar-panel {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  /* Modals — full screen on mobile */
+  .modal-inner {
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    min-height: 100vh;
+    padding: 20px 16px !important;
+  }
+
+  /* Sub-tabs — scrollable */
+  .sub-tabs-row {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Buttons — full width on small screens */
+  .btn-block-mobile { width: 100%; justify-content: center; }
+
+  /* Section header — stack */
+  .section-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+  /* PIN pad — larger keys on mobile */
+  .pin-key { font-size: 22px; }
+
+  /* Dashboard grid — 2 columns on mobile */
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Equipment hub — stack panels */
+  .equipment-hub-layout {
+    flex-direction: column !important;
+  }
+  .equipment-hub-panel {
+    width: 100% !important;
+    max-height: 180px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Dashboard — single column on very small screens */
+  .dashboard-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  /* Booking — week view horizontal scroll */
+  .booking-week-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }

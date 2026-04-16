@@ -300,10 +300,10 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
   }
 
   return (
-    <div style={{ userSelect: 'none', overflowY: 'auto', maxHeight: 'calc(100vh - 240px)' }}>
+    <div className='booking-week-scroll' style={{ userSelect: 'none', overflowY: 'auto', overflowX: 'auto', maxHeight: 'calc(100vh - 240px)' }}>
 
       {/* Sticky header row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '2px solid var(--border)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', minWidth: 500, position: 'sticky', top: 0, zIndex: 20, background: 'var(--surface)', borderBottom: '2px solid var(--border)' }}>
         <div style={{ height: 40 }} />
         {days.map((day, i) => (
           <div key={i} style={{ height: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', fontSize: 11, borderLeft: '1px solid var(--border)', background: sameDay(day, today) ? 'var(--accent-light)' : 'var(--surface)' }}>
@@ -314,7 +314,7 @@ function WeekView({ weekStart, bookings, onSlotClick, onBookingClick, canBook })
       </div>
 
       {/* Grid body */}
-      <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', position: 'relative' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '44px repeat(7, 1fr)', minWidth: 500, position: 'relative' }}>
         {/* Time labels column */}
         <div style={{ position: 'relative', height: TOTAL_H }}>
           {HOURS.map(h => (
@@ -665,10 +665,10 @@ function BookingCalendar({ session }) {
   const categories = [...new Set(equipment.map(e => e.category).filter(Boolean))].sort()
 
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+    <div className='booking-layout' style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
 
       {/* ── Left: equipment selector ── */}
-      <div style={{ width: 220, flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+      <div className='booking-equipment-panel' style={{ width: 220, flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search…" style={{ width: '100%', fontSize: 12 }} />
           <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ width: '100%', fontSize: 12 }}>
@@ -706,7 +706,7 @@ function BookingCalendar({ session }) {
       </div>
 
       {/* ── Right: calendar ── */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div className='booking-calendar-panel' style={{ flex: 1, minWidth: 0 }}>
 
         {/* Notifications */}
         {notifications.map(n => (
