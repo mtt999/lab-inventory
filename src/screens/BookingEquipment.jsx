@@ -4,6 +4,16 @@ import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
 
 function canEdit(s) { return s?.role === 'admin' || s?.role === 'user' }
+
+function useIsMobile() {
+  const [isMobile, setIsMobile] = React.useState(window.innerWidth < 768)
+  React.useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', fn)
+    return () => window.removeEventListener('resize', fn)
+  }, [])
+  return isMobile
+}
 function isAdmin(s) { return s?.role === 'admin' }
 
 // ── Date helpers ──────────────────────────────────────────────
@@ -664,11 +674,12 @@ function BookingCalendar({ session }) {
 
   const categories = [...new Set(equipment.map(e => e.category).filter(Boolean))].sort()
 
+  const isMobile = useIsMobile()
   return (
-    <div className='booking-layout' style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 16, alignItems: 'flex-start' }}>
 
       {/* ── Left: equipment selector ── */}
-      <div className='booking-equipment-panel' style={{ width: 220, flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+      <div style={{ width: isMobile ? '100%' : 220, flexShrink: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
         <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search…" style={{ width: '100%', fontSize: 12 }} />
           <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ width: '100%', fontSize: 12 }}>
@@ -682,7 +693,7 @@ function BookingCalendar({ session }) {
             <button onClick={() => setSelectedEq([])} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent)', fontSize: 12, padding: 0 }}>Clear</button>
           </div>
         )}
-        <div style={{ maxHeight: 500, overflowY: 'auto' }}>
+        <div style={{ maxHeight: isMobile ? 200 : 500, overflowY: 'auto' }}>
           {loading ? <div style={{ padding: 16, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
             : filteredEq.map(e => (
               <div key={e.id} onClick={() => toggleEquipment(e.id)}
@@ -706,7 +717,7 @@ function BookingCalendar({ session }) {
       </div>
 
       {/* ── Right: calendar ── */}
-      <div className='booking-calendar-panel' style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ flex: 1, minWidth: 0, width: isMobile ? '100%' : 'auto' }}>
 
         {/* Notifications */}
         {notifications.map(n => (
