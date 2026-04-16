@@ -600,6 +600,53 @@ function MaintenanceDue({ session }) {
 // ══════════════════════════════════════════════════════════════
 // TAB 3 — SETTINGS
 // ══════════════════════════════════════════════════════════════
+function CategoriesManager({ toast }) {
+  const [categories, setCategories] = useState([])
+  const [newCat, setNewCat] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { loadCats() }, [])
+
+  async function loadCats() {
+    setLoading(true)
+    const { data } = await sb.from('equipment_categories').select('*').order('name')
+    setCategories(data || [])
+    setLoading(false)
+  }
+
+  async function addCategory() {
+    if (!newCat.trim()) return
+    await sb.from('equipment_categories').insert({ name: newCat.trim() })
+    setNewCat(''); loadCats(); toast('Category added.')
+  }
+
+  async function deleteCategory(id) {
+    if (!confirm('Delete this category? Equipment using it will become uncategorized.')) return
+    await sb.from('equipment_categories').delete().eq('id', id)
+    loadCats(); toast('Category deleted.')
+  }
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Categories</div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 14 }}>Add or remove equipment categories.</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <input value={newCat} onChange={e => setNewCat(e.target.value)} onKeyDown={e => e.key === 'Enter' && addCategory()} placeholder="New category name…" style={{ flex: 1 }} />
+        <button className="btn btn-sm btn-primary" onClick={addCategory}>Add</button>
+      </div>
+      {loading ? <div className="spinner" style={{ margin: '0 auto' }} /> : categories.map(c => (
+        <div key={c.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--surface2)', fontSize: 13 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
+            {c.name}
+          </div>
+          <button className="btn btn-sm btn-danger" style={{ padding: '2px 8px', fontSize: 11 }} onClick={() => deleteCategory(c.id)}>✕</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function EquipmentSettings({ session }) {
   const { toast } = useAppStore()
   const [defaultInterval, setDefaultInterval] = useState('365')
@@ -638,16 +685,7 @@ function EquipmentSettings({ session }) {
         </div>
       </div>
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Categories</div>
-        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 12 }}>Current equipment categories in use:</div>
-        {CATEGORIES.map(c => (
-          <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--surface2)', fontSize: 13 }}>
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent)', display: 'inline-block' }} />
-            {c}
-          </div>
-        ))}
-      </div>
+      <CategoriesManager toast={toast} />
 
       {session?.role === 'admin' && (
         <div className="card" style={{ borderColor: 'var(--accent2)' }}>

@@ -1,103 +1,130 @@
-import { useState } from 'react'
-import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
-
-const ROLES = [
-  { key: 'user',    label: 'Staff' },
-  { key: 'student', label: 'Student' },
-  { key: 'admin',   label: 'Admin' },
-]
+import { sb } from '../lib/supabase'
+import { useState } from 'react'
 
 export default function Login() {
-  const { settings, setSession } = useAppStore()
-  const [role, setRole] = useState('user')
-  const [pin, setPin] = useState('')
+  const { setSession, settings } = useAppStore()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
-  function pressKey(d) {
-    if (pin.length >= 4) return
-    const next = pin + d
-    setPin(next)
-    if (next.length === 4) setTimeout(() => tryLogin(next), 180)
-  }
+  async function handleLogin(e) {
+    e.preventDefault()
+    if (!email.trim() || !password.trim()) { setError('Please enter email and password.'); return }
+    setLoading(true); setError('')
 
-  async function tryLogin(p = pin) {
-    setError('')
-    if (role === 'admin') {
-      if (p === (settings['admin_pin'] || '1234')) {
-        setSession({ role: 'admin', username: 'Admin' })
-      } else {
-        setError('Incorrect admin PIN')
-        setPin('')
+    const emailLower = email.trim().toLowerCase()
+
+    // Check owner admin (hardcoded email from settings or env)
+    const { data: adminSettings } = await sb.from('settings').select('value').eq('key', 'admin_email').maybeSingle()
+    const adminEmail = adminSettings?.value || 'motlagh999@gmail.com'
+    const { data: adminPass } = await sb.from('settings').select('value').eq('key', 'admin_password').maybeSingle()
+
+    // Check users table
+    const { data: users } = await sb.from('users')
+      .select('*').eq('is_active', true)
+      .or(`email.eq.${emailLower}`)
+
+    const user = users?.[0]
+
+    if (!user) {
+      // Check if owner admin
+      if (emailLower === adminEmail.toLowerCase() && password === (adminPass?.value || 'Motlagh@2026')) {
+        setSession({ role: 'admin', username: 'Admin', userId: null, adminLevel: 3 })
+        setLoading(false); return
       }
-    } else {
-      // staff and student both look up by PIN, but filter by role
-      const { data } = await sb.from('users').select('*').eq('pin', p).eq('role', role).limit(1)
-      if (data && data.length > 0) {
-        setSession({ role: data[0].role, username: data[0].name, userId: data[0].id })
-      } else {
-        setError('Incorrect PIN')
-        setPin('')
-      }
+      setError('No account found with this email.'); setLoading(false); return
     }
+
+    if (user.password !== password) {
+      setError('Incorrect password.'); setLoading(false); return
+    }
+
+    // Determine role/level
+    const adminLevel = user.admin_level || 0
+    const role = user.role === 'admin' || adminLevel >= 1 ? 'admin' : user.role
+
+    setSession({
+      role,
+      username: user.name,
+      userId: user.id,
+      email: user.email,
+      adminLevel,
+      photoUrl: user.photo_url,
+      avatar: user.avatar,
+    })
+    setLoading(false)
   }
-
-  const dots = Array.from({ length: 4 }, (_, i) => i < pin.length)
-
-  // dot color per role
-  const dotColor = role === 'admin' ? 'var(--accent2)' : role === 'student' ? 'var(--accent3)' : 'var(--accent)'
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', padding: 20, background: 'var(--bg)' }}>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '40px 32px', width: '100%', maxWidth: 380, textAlign: 'center' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 20 }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: 36 }}>
+          <div style={{ fontFamily: 'var(--mono)', fontWeight: 500, fontSize: 28, letterSpacing: '-1px', color: 'var(--accent)', marginBottom: 6 }}>
+            ICT-<span style={{ color: 'var(--text3)' }}>Lab</span>
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--text3)' }}>Illinois Center for Transportation · UIUC</div>
+        </div>
 
-        <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 500, color: 'var(--accent)', marginBottom: 4 }}>ICT-Lab</div>
-        <div style={{ marginBottom: 32 }}></div>
+        <div className="card" style={{ padding: 32 }}>
+          <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 4 }}>Sign in</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>Enter your email and password to continue</div>
 
-        {/* Role tabs — 3 tabs */}
-        <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: 3, marginBottom: 28, gap: 2 }}>
-          {ROLES.map(r => (
-            <button key={r.key} onClick={() => { setRole(r.key); setPin(''); setError('') }}
-              style={{
-                flex: 1, padding: '8px 4px', border: 'none', borderRadius: 8,
-                background: role === r.key ? 'var(--surface)' : 'transparent',
-                fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                color: role === r.key ? 'var(--text)' : 'var(--text2)',
-                boxShadow: role === r.key ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
-                transition: 'all 0.15s'
-              }}>
-              {r.label}
+          <form onSubmit={handleLogin}>
+            <div className="field">
+              <label>Email address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError('') }}
+                placeholder="netid@illinois.edu"
+                autoComplete="email"
+                autoFocus
+              />
+            </div>
+            <div className="field">
+              <label>Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  style={{ paddingRight: 44 }}
+                />
+                <button type="button" onClick={() => setShowPassword(s => !s)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text3)', padding: 4 }}>
+                  {showPassword ? '🙈' : '👁️'}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div style={{ fontSize: 13, color: 'var(--accent2)', background: 'var(--accent2-light)', borderRadius: 8, padding: '8px 12px', marginBottom: 16 }}>
+                ⚠️ {error}
+              </div>
+            )}
+
+            <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 15, padding: '12px' }} disabled={loading}>
+              {loading ? 'Signing in…' : 'Sign in'}
             </button>
-          ))}
+          </form>
+
+          <div style={{ marginTop: 20, padding: '12px 16px', background: 'var(--surface2)', borderRadius: 8, fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>
+            Forgot your password? Contact your ICT-RE or admin to reset it.
+          </div>
         </div>
 
-        {/* PIN dots */}
-        <div style={{ height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 24 }}>
-          {dots.map((filled, i) => (
-            <div key={i} style={{
-              width: 12, height: 12, borderRadius: '50%', margin: '0 5px',
-              border: `2px solid ${filled ? dotColor : 'var(--border)'}`,
-              background: filled ? dotColor : 'transparent',
-              transition: 'all 0.15s'
-            }} />
-          ))}
+        {/* Copyright */}
+        <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'var(--text3)', lineHeight: 1.8 }}>
+          <div>© {new Date().getFullYear()} ICT-Lab · Illinois Center for Transportation</div>
+          <div style={{ fontWeight: 500, color: 'var(--text2)' }}>Developed by Mohsen Motlagh</div>
+          <div>University of Illinois Urbana-Champaign</div>
         </div>
-
-        {/* PIN pad */}
-        <div className="pin-pad">
-          {[1,2,3,4,5,6,7,8,9].map(n => (
-            <button key={n} className="pin-key" onClick={() => pressKey(String(n))}>{n}</button>
-          ))}
-          <button className="pin-key" style={{ fontSize: 13 }} onClick={() => { setPin(''); setError('') }}>CLR</button>
-          <button className="pin-key" onClick={() => pressKey('0')}>0</button>
-          <button className="pin-key" onClick={() => setPin(p => p.slice(0, -1))}>⌫</button>
-        </div>
-
-        {error && <div style={{ fontSize: 13, color: 'var(--accent2)', marginTop: 14 }}>{error}</div>}
-
-        <div style={{ marginTop: 24, fontSize: 12, color: 'var(--text3)', lineHeight: 1.6 }}>Contact ICT-Research Engineers for<br />registration or login issues</div>
-
-
       </div>
     </div>
   )

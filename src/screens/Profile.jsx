@@ -44,31 +44,58 @@ function AdminProfile() {
         ))}
       </div>
 
-      {adminTab === 'admin' && <AdminSettings settings={settings} refreshCache={refreshCache} toast={toast} />}
-      {adminTab === 'students' && <StudentsPanel toast={toast} />}
+      {adminTab === 'admin' && <AdminSettings session={session} toast={toast} />}
+      {adminTab === 'students' && <StudentsPanel toast={toast} session={session} />}
     </div>
   )
 }
 
-function AdminSettings({ settings, refreshCache, toast }) {
-  async function saveAdminPin() {
-    const val = document.getElementById('admin-pin-input').value
-    if (!/^\d{4}$/.test(val)) { toast('PIN must be exactly 4 digits.'); return }
-    await sb.from('settings').upsert({ key: 'admin_pin', value: val })
-    await refreshCache()
-    document.getElementById('admin-pin-input').value = ''
-    toast('Admin PIN updated ✓')
+function AdminSettings({ session, toast }) {
+  const [form, setForm] = useState({ email: '', currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function savePassword() {
+    setError('')
+    if (!form.newPassword) { setError('Enter a new password.'); return }
+    if (form.newPassword !== form.confirmPassword) { setError('Passwords do not match.'); return }
+    if (form.newPassword.length < 6) { setError('Password must be at least 6 characters.'); return }
+    setSaving(true)
+    if (session.userId) {
+      // Verify current password first
+      const { data } = await sb.from('users').select('password').eq('id', session.userId).single()
+      if (data?.password && data.password !== form.currentPassword) {
+        setError('Current password is incorrect.'); setSaving(false); return
+      }
+      await sb.from('users').update({ password: form.newPassword, email: form.email || undefined }).eq('id', session.userId)
+    } else {
+      // Owner admin — save to settings
+      await sb.from('settings').upsert({ key: 'admin_password', value: form.newPassword })
+      if (form.email) await sb.from('settings').upsert({ key: 'admin_email', value: form.email })
+    }
+    toast('Password updated ✓')
+    setForm({ email: '', currentPassword: '', newPassword: '', confirmPassword: '' })
+    setSaving(false)
   }
 
   return (
-    <div className="card" style={{ maxWidth: 400 }}>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Change Admin PIN</div>
-      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>Update the 4-digit PIN used to log in as Admin.</div>
-      <div className="field">
-        <label>New Admin PIN (4 digits)</label>
-        <input type="password" id="admin-pin-input" maxLength={4} placeholder="····" style={{ width: 120, fontFamily: 'var(--mono)', fontSize: 18, letterSpacing: '0.2em', textAlign: 'center' }} />
+    <div className="card" style={{ maxWidth: 440 }}>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>🔑 Account Settings</div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>Update your login email and password.</div>
+      <div className="field"><label>Email address</label>
+        <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="motlagh999@gmail.com" />
       </div>
-      <button className="btn btn-primary" onClick={saveAdminPin}>Update PIN</button>
+      <div className="field"><label>Current password</label>
+        <input type="password" value={form.currentPassword} onChange={e => setForm(f => ({ ...f, currentPassword: e.target.value }))} placeholder="••••••••" />
+      </div>
+      <div className="field"><label>New password</label>
+        <input type="password" value={form.newPassword} onChange={e => setForm(f => ({ ...f, newPassword: e.target.value }))} placeholder="Min. 6 characters" />
+      </div>
+      <div className="field"><label>Confirm new password</label>
+        <input type="password" value={form.confirmPassword} onChange={e => setForm(f => ({ ...f, confirmPassword: e.target.value }))} placeholder="••••••••" />
+      </div>
+      {error && <div style={{ fontSize: 13, color: 'var(--accent2)', marginBottom: 12 }}>⚠️ {error}</div>}
+      <button className="btn btn-primary" onClick={savePassword} disabled={saving}>{saving ? 'Saving…' : 'Update password'}</button>
     </div>
   )
 }
@@ -96,9 +123,9 @@ function StudentsPanel({ toast }) {
 
   async function saveStudent(form, id) {
     if (!form.name.trim()) { toast('Name is required.'); return }
-    if (!id && (!form.pin || !/^\d{4}$/.test(form.pin))) { toast('PIN must be 4 digits.'); return }
-    const payload = { name: form.name.trim(), email: form.email||null, phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null, supervisor: form.supervisor||null, project_group: form.project_group||null, role: 'student', is_active: true }
-    if (form.pin && /^\d{4}$/.test(form.pin)) payload.pin = form.pin
+    if (!id && !form.password) { toast('Password is required.'); return }
+    const payload = { name: form.name.trim(), email: form.email||null, phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null, supervisor: form.supervisor||null, project_group: form.project_group||null, role: form.admin_level >= 1 ? 'admin' : 'user', is_active: true, admin_level: form.admin_level||0 }
+    if (form.password) payload.password = form.password
     if (id) await sb.from('users').update(payload).eq('id', id)
     else await sb.from('users').insert(payload)
     setShowModal(false); setEditStudent(null); loadStudents(); toast('Student saved.')
@@ -183,12 +210,15 @@ function StudentsPanel({ toast }) {
           <div key={s.id} className="card" style={{ padding: '12px 18px', marginBottom: 10, opacity: s.is_active ? 1 : 0.5 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontWeight: 600 }}>{s.name} {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}</div>
+                <div style={{ fontWeight: 600 }}>{s.name}
+                  {s.admin_level >= 1 && <span style={{ marginLeft: 8, fontSize: 11, background: '#e0f2fe', color: '#0369a1', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Admin {s.admin_level}</span>}
+                  {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}
+                </div>
                 <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
-                  {s.email && <span>{s.email}</span>}
+                  {s.email && <span>📧 {s.email}</span>}
+                  {s.password && <span>🔑 {s.password}</span>}
                   {s.degree && <span>{s.degree}</span>}
                   {s.project_group && <span>{s.project_group}</span>}
-                  {s.supervisor && <span>Supervisor: {s.supervisor}</span>}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -210,15 +240,25 @@ function StudentsPanel({ toast }) {
 
 function StudentModal({ student, onClose, onSave }) {
   const [form, setForm] = useState(student
-    ? { name: student.name||'', pin:'', email: student.email||'', phone: student.phone||'', degree: student.degree||'', year_semester: student.year_semester||'', supervisor: student.supervisor||'', project_group: student.project_group||'' }
-    : { name:'', pin:'', email:'', phone:'', degree:'', year_semester:'', supervisor:'', project_group:'' })
+    ? { name: student.name||'', password:'', email: student.email||'', phone: student.phone||'', degree: student.degree||'', year_semester: student.year_semester||'', supervisor: student.supervisor||'', project_group: student.project_group||'', admin_level: student.admin_level||0 }
+    : { name:'', password:'', email:'', phone:'', degree:'', year_semester:'', supervisor:'', project_group:'', admin_level:0 })
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:520, width:'100%', maxHeight:'90vh', overflowY:'auto', border:'1px solid var(--border)' }}>
         <div style={{ fontWeight:600, fontSize:16, marginBottom:20 }}>{student ? 'Edit student' : 'Add student'}</div>
         <div className="grid-2">
           <div className="field"><label>Full Name *</label><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} autoFocus /></div>
-          <div className="field"><label>PIN{student?' (leave blank to keep)':' *'}</label><input type="password" maxLength={4} value={form.pin} onChange={e=>setForm(f=>({...f,pin:e.target.value}))} placeholder="····" style={{width:100}} /></div>
+          <div className="field"><label>Email *</label><input type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="netid@illinois.edu" /></div>
+        </div>
+        <div className="grid-2">
+          <div className="field"><label>Password{student?' (leave blank to keep)':' *'}</label><input type="text" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="Min. 6 chars" /></div>
+          <div className="field"><label>Admin Level</label>
+            <select value={form.admin_level||0} onChange={e=>setForm(f=>({...f,admin_level:parseInt(e.target.value)}))}>
+              <option value={0}>Staff / Student (0)</option>
+              <option value={1}>Admin 1</option>
+              <option value={2}>Admin 2</option>
+            </select>
+          </div>
         </div>
         <div className="grid-2">
           <div className="field"><label>Email</label><input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="netid@illinois.edu" /></div>
@@ -294,13 +334,13 @@ function UserProfile({ session }) {
 
   async function savePin() {
     setPinError('')
-    if (!pinForm.current) { setPinError('Enter your current PIN.'); return }
-    if (!/^\d{4}$/.test(pinForm.newPin)) { setPinError('New PIN must be 4 digits.'); return }
-    if (pinForm.newPin !== pinForm.confirm) { setPinError('PINs do not match.'); return }
-    const { data } = await sb.from('users').select('pin').eq('id', user.id).single()
-    if (data?.pin !== pinForm.current) { setPinError('Current PIN is incorrect.'); return }
-    await sb.from('users').update({ pin: pinForm.newPin }).eq('id', user.id)
-    toast('PIN updated ✓'); setPinForm({ current: '', newPin: '', confirm: '' })
+    if (!pinForm.current) { setPinError('Enter your current password.'); return }
+    if (!pinForm.newPin || pinForm.newPin.length < 6) { setPinError('New password must be at least 6 characters.'); return }
+    if (pinForm.newPin !== pinForm.confirm) { setPinError('Passwords do not match.'); return }
+    const { data } = await sb.from('users').select('password').eq('id', user.id).single()
+    if (data?.password && data.password !== pinForm.current) { setPinError('Current password is incorrect.'); return }
+    await sb.from('users').update({ password: pinForm.newPin }).eq('id', user.id)
+    toast('Password updated ✓'); setPinForm({ current: '', newPin: '', confirm: '' })
   }
 
   async function uploadPhoto(file) {
@@ -360,7 +400,7 @@ function UserProfile({ session }) {
 
       {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
-        {[{ key: 'info', label: '👤 Info' }, { key: 'avatar', label: '🖼️ Photo' }, { key: 'pin', label: '🔑 PIN' }].map(t => (
+        {[{ key: 'info', label: '👤 Info' }, { key: 'avatar', label: '🖼️ Photo' }, { key: 'pin', label: '🔑 Password' }].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             style={{ padding: '10px 20px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: activeTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${activeTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s' }}>
             {t.label}
@@ -439,12 +479,12 @@ function UserProfile({ session }) {
       {/* PIN tab */}
       {activeTab === 'pin' && (
         <div className="card">
-          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Change login PIN</div>
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Your PIN must be exactly 4 digits.</div>
-          <div className="field"><label>Current PIN</label><input type="password" maxLength={4} value={pinForm.current} onChange={e => { setPinForm(f => ({ ...f, current: e.target.value })); setPinError('') }} placeholder="····" style={{ width: 120, fontFamily: 'var(--mono)', fontSize: 18, letterSpacing: '0.2em', textAlign: 'center' }} /></div>
+          <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Change password</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Your password must be at least 6 characters.</div>
+          <div className="field"><label>Current PIN</label><input type="password" value={pinForm.current} onChange={e => { setPinForm(f => ({ ...f, current: e.target.value })); setPinError('') }} placeholder="Current password" /></div>
           <div className="grid-2">
-            <div className="field"><label>New PIN</label><input type="password" maxLength={4} value={pinForm.newPin} onChange={e => { setPinForm(f => ({ ...f, newPin: e.target.value })); setPinError('') }} placeholder="····" style={{ width: 120, fontFamily: 'var(--mono)', fontSize: 18, letterSpacing: '0.2em', textAlign: 'center' }} /></div>
-            <div className="field"><label>Confirm new PIN</label><input type="password" maxLength={4} value={pinForm.confirm} onChange={e => { setPinForm(f => ({ ...f, confirm: e.target.value })); setPinError('') }} placeholder="····" style={{ width: 120, fontFamily: 'var(--mono)', fontSize: 18, letterSpacing: '0.2em', textAlign: 'center' }} /></div>
+            <div className="field"><label>New PIN</label><input type="password" value={pinForm.newPin} onChange={e => { setPinForm(f => ({ ...f, newPin: e.target.value })); setPinError('') }} placeholder="Min. 6 characters" /></div>
+            <div className="field"><label>Confirm new PIN</label><input type="password" value={pinForm.confirm} onChange={e => { setPinForm(f => ({ ...f, confirm: e.target.value })); setPinError('') }} placeholder="Confirm new password" /></div>
           </div>
           {pinError && <div style={{ fontSize: 13, color: 'var(--accent2)', marginBottom: 12 }}>⚠️ {pinError}</div>}
           <button className="btn btn-primary" onClick={savePin} disabled={!pinForm.current || !pinForm.newPin || !pinForm.confirm}>Update PIN</button>

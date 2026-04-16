@@ -513,15 +513,6 @@ function SettingsTab() {
     await refreshCache(); toast('Reminder day saved.')
   }
 
-  async function saveAdminPin() {
-    const val = document.getElementById('settings-admin-pin').value
-    if (!/^\d{4}$/.test(val)) { toast('PIN must be exactly 4 digits.'); return }
-    await sb.from('settings').upsert({ key: 'admin_pin', value: val })
-    await refreshCache()
-    document.getElementById('settings-admin-pin').value = ''
-    toast('Admin PIN updated.')
-  }
-
   return (
     <div>
       <div className="card">
@@ -537,9 +528,8 @@ function SettingsTab() {
         <div className="text-muted">Users see a reminder banner the day before this day.</div>
       </div>
       <div className="card">
-        <div className="card-title">Change admin PIN</div>
-        <div className="field"><label>New admin PIN (4 digits)</label><input type="password" id="settings-admin-pin" maxLength={4} placeholder="····" style={{ width: 120 }} /></div>
-        <button className="btn btn-sm btn-primary" onClick={saveAdminPin}>Update PIN</button>
+        <div className="card-title">Account & password</div>
+        <div className="text-muted">To change your password or email, go to your <strong>Profile</strong> page.</div>
       </div>
     </div>
   )
