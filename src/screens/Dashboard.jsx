@@ -13,10 +13,11 @@ function getModules(role) {
     { key: 'equipmenthub',screen: 'equipmenthub',label: 'Equipment',          sub: 'Info, SOP & standards',         icon: '📚', bg: '#e8f2ee', color: '#1e4d39' },
     { key: 'booking',     screen: 'booking',     label: 'Booking Equipment',  sub: 'Reserve lab equipment',         icon: '📅', bg: '#e0f2fe', color: '#0369a1' },
     { key: 'mileage',     screen: null,          label: 'Mileage Form',       sub: 'Submit mileage reimbursement',  icon: '🚗', bg: '#fdf0ed', color: '#c84b2f', external: true },
+    { key: 'labsafety',   screen: null,          label: 'Lab Safety',         sub: 'Safety training & certification', icon: '🦺', bg: '#fef3c7', color: '#92400e', external: true, urlKey: 'labsafety_url' },
     { key: 'profile',     screen: 'profile',     label: 'Profile',            sub: 'Your info & settings',          icon: '👤', bg: '#f3eeff', color: '#7c4dbd' },
   ]
-  if (role === 'admin') return all.filter(m => m.key !== 'mileage')
-  if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub','booking','mileage'].includes(m.key))
+  if (role === 'admin') return all.filter(m => !m.external)
+  if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub','booking','mileage','labsafety'].includes(m.key))
   return all
 }
 
@@ -43,14 +44,14 @@ function ExternalLinkModal({ url, onConfirm, onCancel }) {
 }
 
 // ── Card Grid View ────────────────────────────────────────────
-function CardGridView({ modules, onNavigate, mileageUrl, isAdmin, onEditUrl }) {
-  const [confirmMileage, setConfirmMileage] = useState(false)
+function CardGridView({ modules, onNavigate, mileageUrl, labSafetyUrl, isAdmin, onEditUrl }) {
+  const [confirmExternal, setConfirmExternal] = useState(null) // { url, label }
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14 }}>
         {modules.map(m => (
           <div key={m.key}
-            onClick={() => m.external ? setConfirmMileage(true) : onNavigate(m.screen)}
+            onClick={() => m.external ? setConfirmExternal({ url: m.key === 'mileage' ? mileageUrl : labSafetyUrl, label: m.label }) : onNavigate(m.screen)}
             style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '22px 18px', cursor: 'pointer', transition: 'all 0.15s', position: 'relative' }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = m.color; e.currentTarget.style.transform = 'translateY(-2px)' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}>
@@ -60,24 +61,27 @@ function CardGridView({ modules, onNavigate, mileageUrl, isAdmin, onEditUrl }) {
             <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>{m.sub}</div>
           </div>
         ))}
-        {/* Admin-only: Mileage management card */}
-        {isAdmin && (
-          <div onClick={onEditUrl}
+        {/* Admin-only: external link management cards */}
+        {isAdmin && [
+          { key: 'mileage', icon: '🚗', label: 'Mileage Form', bg: '#fdf0ed', color: '#c84b2f' },
+          { key: 'labsafety', icon: '🦺', label: 'Lab Safety', bg: '#fef3c7', color: '#92400e' },
+        ].map(card => (
+          <div key={card.key} onClick={() => onEditUrl(card.key)}
             style={{ background: 'var(--surface)', border: '1px dashed var(--border)', borderRadius: 'var(--radius-lg)', padding: '22px 18px', cursor: 'pointer', transition: 'all 0.15s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#c84b2f'; e.currentTarget.style.transform = 'translateY(-2px)' }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = card.color; e.currentTarget.style.transform = 'translateY(-2px)' }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.transform = 'translateY(0)' }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: '#fdf0ed', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, fontSize: 22 }}>🚗</div>
-            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>Mileage Form</div>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: card.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14, fontSize: 22 }}>{card.icon}</div>
+            <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)', marginBottom: 4 }}>{card.label}</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', lineHeight: 1.4 }}>Manage external link</div>
-            <div style={{ marginTop: 8, fontSize: 11, color: '#c84b2f', fontWeight: 500 }}>⚙ Edit URL</div>
+            <div style={{ marginTop: 8, fontSize: 11, color: card.color, fontWeight: 500 }}>⚙ Edit URL</div>
           </div>
-        )}
+        ))}
       </div>
-      {confirmMileage && (
+      {confirmExternal && (
         <ExternalLinkModal
-          url={mileageUrl}
-          onConfirm={() => { window.open(mileageUrl, '_blank'); setConfirmMileage(false) }}
-          onCancel={() => setConfirmMileage(false)}
+          url={confirmExternal.url}
+          onConfirm={() => { window.open(confirmExternal.url, '_blank'); setConfirmExternal(null) }}
+          onCancel={() => setConfirmExternal(null)}
         />
       )}
     </>
@@ -85,11 +89,11 @@ function CardGridView({ modules, onNavigate, mileageUrl, isAdmin, onEditUrl }) {
 }
 
 // ── Dashboard View ────────────────────────────────────────────
-function DashboardView({ modules, onNavigate, session, mileageUrl }) {
+function DashboardView({ modules, onNavigate, session, mileageUrl, labSafetyUrl, isAdmin, onEditUrl }) {
   const [stats, setStats] = useState({ lowSupplies: 0, activeProjects: 0, students: 0, pendingTraining: 0 })
   const [recentInspections, setRecentInspections] = useState([])
   const [loading, setLoading] = useState(true)
-  const [confirmMileage, setConfirmMileage] = useState(false)
+  const [confirmExternal, setConfirmExternal] = useState(null)
 
   useEffect(() => { loadStats() }, [])
 
@@ -160,7 +164,7 @@ function DashboardView({ modules, onNavigate, session, mileageUrl }) {
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Quick access</div>
           {modules.map(m => (
             <div key={m.key}
-              onClick={() => m.external ? setConfirmMileage(true) : onNavigate(m.screen)}
+              onClick={() => m.external ? setConfirmExternal({ url: m.key === 'mileage' ? mileageUrl : labSafetyUrl, label: m.label }) : onNavigate(m.screen)}
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '12px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, transition: 'all 0.15s', position: 'relative' }}
               onMouseEnter={e => { e.currentTarget.style.borderColor = m.color; e.currentTarget.style.background = m.bg }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)' }}>
@@ -175,11 +179,11 @@ function DashboardView({ modules, onNavigate, session, mileageUrl }) {
         </div>
       </div>
 
-      {confirmMileage && (
+      {confirmExternal && (
         <ExternalLinkModal
-          url={mileageUrl}
-          onConfirm={() => { window.open(mileageUrl, '_blank'); setConfirmMileage(false) }}
-          onCancel={() => setConfirmMileage(false)}
+          url={confirmExternal.url}
+          onConfirm={() => { window.open(confirmExternal.url, '_blank'); setConfirmExternal(null) }}
+          onCancel={() => setConfirmExternal(null)}
         />
       )}
     </>
@@ -193,7 +197,8 @@ export default function Dashboard() {
   const { session, setScreen } = useAppStore()
   const [view, setView] = useState(() => localStorage.getItem('labstock_view') || 'grid')
   const [mileageUrl, setMileageUrl] = useState('https://bw4qh7p8sn.us-east-1.awsapprunner.com/')
-  const [editingUrl, setEditingUrl] = useState(false)
+  const [labSafetyUrl, setLabSafetyUrl] = useState('https://canvas.illinois.edu/')
+  const [editingUrl, setEditingUrl] = useState(null) // 'mileage' | 'labsafety'
   const [urlInput, setUrlInput] = useState('')
   const [savingUrl, setSavingUrl] = useState(false)
   const modules = getModules(session?.role)
@@ -202,16 +207,22 @@ export default function Dashboard() {
   useEffect(() => { loadMileageUrl() }, [])
 
   async function loadMileageUrl() {
-    const { data } = await sb.from('settings').select('value').eq('key', 'mileage_url').maybeSingle()
-    if (data?.value) setMileageUrl(data.value)
+    const [{ data: m }, { data: s }] = await Promise.all([
+      sb.from('settings').select('value').eq('key', 'mileage_url').maybeSingle(),
+      sb.from('settings').select('value').eq('key', 'labsafety_url').maybeSingle(),
+    ])
+    if (m?.value) setMileageUrl(m.value)
+    if (s?.value) setLabSafetyUrl(s.value)
   }
 
-  async function saveMileageUrl() {
+  async function saveUrl() {
     if (!urlInput.trim()) return
     setSavingUrl(true)
-    await sb.from('settings').upsert({ key: 'mileage_url', value: urlInput.trim() })
-    setMileageUrl(urlInput.trim())
-    setEditingUrl(false)
+    const key = editingUrl === 'mileage' ? 'mileage_url' : 'labsafety_url'
+    await sb.from('settings').upsert({ key, value: urlInput.trim() })
+    if (editingUrl === 'mileage') setMileageUrl(urlInput.trim())
+    else setLabSafetyUrl(urlInput.trim())
+    setEditingUrl(null)
     setSavingUrl(false)
   }
 
@@ -256,26 +267,26 @@ export default function Dashboard() {
 
       {/* View */}
       {view === 'grid'
-        ? <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} isAdmin={isAdmin} onEditUrl={() => { setEditingUrl(true); setUrlInput(mileageUrl) }} />
-        : <DashboardView modules={modules} onNavigate={s => setScreen(s)} session={session} mileageUrl={mileageUrl} />
+        ? <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} />
+        : <DashboardView modules={modules} onNavigate={s => setScreen(s)} session={session} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} />
       }
 
       {/* Mileage URL edit modal */}
-      {editingUrl && (
+      {editingUrl !== null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 28, maxWidth: 480, width: '100%', border: '1px solid var(--border)' }}>
-            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>🔗 Mileage Form URL</div>
-            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Update the external link for the Mileage Form icon on the dashboard.</div>
+            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>{editingUrl === 'mileage' ? '🚗 Mileage Form URL' : '🦺 Lab Safety URL'}</div>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Update the external link for the {editingUrl === 'mileage' ? 'Mileage Form' : 'Lab Safety'} icon on the dashboard.</div>
             <div className="field">
               <label>Website URL</label>
               <input type="url" value={urlInput} onChange={e => setUrlInput(e.target.value)}
                 placeholder="https://..." onKeyDown={e => e.key === 'Enter' && saveMileageUrl()} />
             </div>
             <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-              <button className="btn btn-primary" onClick={saveMileageUrl} disabled={savingUrl || !urlInput.trim()}>
+              <button className="btn btn-primary" onClick={saveUrl} disabled={savingUrl || !urlInput.trim()}>
                 {savingUrl ? 'Saving…' : 'Save URL'}
               </button>
-              <button className="btn" onClick={() => setEditingUrl(false)}>Cancel</button>
+              <button className="btn" onClick={() => setEditingUrl(null)}>Cancel</button>
             </div>
           </div>
         </div>
