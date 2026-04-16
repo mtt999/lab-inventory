@@ -47,6 +47,7 @@ function AdminProfile() {
 
       {adminTab === 'admin' && <AdminSettings session={session} toast={toast} />}
       {adminTab === 'students' && <StudentsPanel toast={toast} session={session} />}
+      {adminTab === 'access' && <AccessControl toast={toast} session={session} />}
     </div>
   )
 }
@@ -536,4 +537,125 @@ export default function Profile() {
   const { session } = useAppStore()
   if (session?.role === 'admin') return <AdminProfile />
   return <UserProfile session={session} />
+}
+
+
+// ── Access Control Panel ──────────────────────────────────────
+function AccessControl({ toast, session }) {
+  const ALL_SCREENS = [
+    { key: 'home',        label: 'Supply Inventory', icon: '📦' },
+    { key: 'projects',    label: 'Project Inventory', icon: '🧪' },
+    { key: 'training',    label: 'Training Records',  icon: '🎓' },
+    { key: 'equipment',   label: 'Equipment Inventory', icon: '🔧' },
+    { key: 'equipmenthub',label: 'Equipment Hub',     icon: '📚' },
+    { key: 'booking',     label: 'Booking Equipment', icon: '📅' },
+    { key: 'remessages',  label: 'Research Engineers', icon: '💬' },
+    { key: 'mileage',     label: 'Mileage Form',      icon: '🚗' },
+    { key: 'labsafety',   label: 'Lab Safety',        icon: '🦺' },
+  ]
+  const [users, setUsers] = useState([])
+  const [selected, setSelected] = useState(null)
+  const [access, setAccess] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { loadUsers() }, [])
+  useEffect(() => { if (selected) loadAccess(selected.id) }, [selected])
+
+  async function loadUsers() {
+    setLoading(true)
+    const { data } = await sb.from('users').select('id, name, role, admin_level').in('role', ['user', 'admin']).eq('is_active', true).order('name')
+    setUsers(data || [])
+    setLoading(false)
+  }
+
+  async function loadAccess(userId) {
+    const { data } = await sb.from('user_screen_access').select('screen_key').eq('user_id', userId)
+    if (data?.length) {
+      const map = {}
+      data.forEach(r => { map[r.screen_key] = true })
+      setAccess(map)
+    } else {
+      // Default: all screens enabled
+      const map = {}
+      ALL_SCREENS.forEach(s => { map[s.key] = true })
+      setAccess(map)
+    }
+  }
+
+  async function saveAccess() {
+    if (!selected) return
+    setSaving(true)
+    // Delete existing, re-insert
+    await sb.from('user_screen_access').delete().eq('user_id', selected.id)
+    const rows = Object.entries(access).filter(([, v]) => v).map(([key]) => ({ user_id: selected.id, screen_key: key }))
+    if (rows.length) await sb.from('user_screen_access').insert(rows)
+    toast('Access updated ✓')
+    setSaving(false)
+  }
+
+  async function setAdminLevel(user, level) {
+    const role = level >= 1 ? 'admin' : 'user'
+    await sb.from('users').update({ admin_level: level, role }).eq('id', user.id)
+    toast(`${user.name} set to ${level >= 1 ? 'Admin ' + level : 'Staff/RE'} ✓`)
+    loadUsers()
+  }
+
+  if (loading) return <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+
+  return (
+    <div>
+      {/* Admin level assignment */}
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>👑 Admin Level Assignment</div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Assign Admin 1 or Admin 2 access to staff members.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {users.map(u => (
+            <div key={u.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--surface2)', borderRadius: 8, flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>{u.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--text3)' }}>{u.role === 'admin' ? `Admin ${u.admin_level}` : 'Staff/RE'}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[{ label: 'Staff/RE', level: 0 }, { label: 'Admin 1', level: 1 }, { label: 'Admin 2', level: 2 }].map(opt => (
+                  <button key={opt.level}
+                    className={`btn btn-sm${(u.admin_level || 0) === opt.level && u.role === (opt.level >= 1 ? 'admin' : 'user') ? ' btn-primary' : ''}`}
+                    onClick={() => setAdminLevel(u, opt.level)}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Screen access per user */}
+      <div className="card">
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>🗂️ Module Access</div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Select a staff member to control which modules they can access.</div>
+        <div className="field" style={{ marginBottom: 16 }}>
+          <label>Select staff member</label>
+          <select value={selected?.id || ''} onChange={e => setSelected(users.find(u => u.id === e.target.value) || null)}>
+            <option value="">— Select —</option>
+            {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role === 'admin' ? 'Admin ' + u.admin_level : 'Staff/RE'})</option>)}
+          </select>
+        </div>
+        {selected && (
+          <>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 10, marginBottom: 16 }}>
+              {ALL_SCREENS.map(s => (
+                <label key={s.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, border: `1px solid ${access[s.key] ? 'var(--accent)' : 'var(--border)'}`, background: access[s.key] ? 'var(--accent-light)' : 'var(--surface2)', cursor: 'pointer', marginBottom: 0 }}>
+                  <input type="checkbox" checked={!!access[s.key]} onChange={e => setAccess(a => ({ ...a, [s.key]: e.target.checked }))} style={{ width: 'auto' }} />
+                  <span style={{ fontSize: 16 }}>{s.icon}</span>
+                  <span style={{ fontSize: 13, fontWeight: 500, color: access[s.key] ? 'var(--accent)' : 'var(--text)' }}>{s.label}</span>
+                </label>
+              ))}
+            </div>
+            <button className="btn btn-primary" onClick={saveAccess} disabled={saving}>{saving ? 'Saving…' : `Save access for ${selected.name}`}</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }

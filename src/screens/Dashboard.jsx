@@ -202,7 +202,19 @@ export default function Dashboard() {
   const [editingUrl, setEditingUrl] = useState(null) // 'mileage' | 'labsafety'
   const [urlInput, setUrlInput] = useState('')
   const [savingUrl, setSavingUrl] = useState(false)
-  const modules = getModules(session?.role)
+  const [userAccess, setUserAccess] = useState(null)
+
+  useEffect(() => {
+    if (session?.userId && (session?.role === 'user' || session?.role === 'admin')) {
+      sb.from('user_screen_access').select('screen_key').eq('user_id', session.userId)
+        .then(({ data }) => { if (data?.length) setUserAccess(new Set(data.map(r => r.screen_key))) })
+    }
+  }, [session?.userId])
+
+  const allModules = getModules(session?.role)
+  const modules = userAccess
+    ? allModules.filter(m => m.external || !m.screen || userAccess.has(m.screen) || m.screen === 'profile' || m.screen === 'dashboard')
+    : allModules
   const isAdmin = session?.role === 'admin'
 
   useEffect(() => { loadMileageUrl() }, [])
