@@ -29,7 +29,7 @@ function AvatarPicker({ selected, onSelect }) {
 // ADMIN PROFILE PAGE
 // ══════════════════════════════════════════════════════════════
 function AdminProfile() {
-  const { session, settings, refreshCache, toast } = useAppStore()
+  const { session, toast } = useAppStore()
   const [adminTab, setAdminTab] = useState('admin')
 
   return (
@@ -41,6 +41,7 @@ function AdminProfile() {
           { key: 'admin',    label: '🔑 Admin Settings' },
           { key: 'students', label: '👥 Students' },
           { key: 'staff',    label: '👨‍💼 Staff & Access' },
+          { key: 'icons',    label: '🖼️ Icon Images' },
         ].map(t => (
           <button key={t.key} onClick={() => setAdminTab(t.key)}
             style={{ padding: '10px 24px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: adminTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${adminTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
@@ -52,6 +53,7 @@ function AdminProfile() {
       {adminTab === 'admin' && <AdminSettings session={session} toast={toast} />}
       {adminTab === 'students' && <StudentsPanel toast={toast} session={session} />}
       {adminTab === 'staff' && <AccessControl toast={toast} session={session} />}
+      {adminTab === 'icons' && <IconImageManager toast={toast} />}
     </div>
   )
 }
@@ -68,14 +70,12 @@ function AdminSettings({ session, toast }) {
     if (form.newPassword.length < 6) { setError('Password must be at least 6 characters.'); return }
     setSaving(true)
     if (session.userId) {
-      // Verify current password first
       const { data } = await sb.from('users').select('password').eq('id', session.userId).single()
       if (data?.password && data.password !== form.currentPassword) {
         setError('Current password is incorrect.'); setSaving(false); return
       }
       await sb.from('users').update({ password: form.newPassword, email: form.email || undefined }).eq('id', session.userId)
     } else {
-      // Owner admin — save to settings
       await sb.from('settings').upsert({ key: 'admin_password', value: form.newPassword })
       if (form.email) await sb.from('settings').upsert({ key: 'admin_email', value: form.email })
     }
@@ -117,7 +117,6 @@ function StudentsPanel({ toast }) {
   const [importPreview, setImportPreview] = useState(null)
   const [importing, setImporting] = useState(false)
   const fileRef = useRef(null)
-
   const [supervisors, setSupervisors] = useState([])
 
   useEffect(() => { loadStudents(); loadSupervisors() }, [])
@@ -130,7 +129,6 @@ function StudentsPanel({ toast }) {
   }
 
   async function loadSupervisors() {
-    // Supervisors = staff (user) + admin roles
     const { data } = await sb.from('users').select('id, name').in('role', ['user','admin']).eq('is_active', true).order('name')
     setSupervisors(data || [])
   }
@@ -144,18 +142,18 @@ function StudentsPanel({ toast }) {
     if (form.password) payload.password = form.password
     if (id) await sb.from('users').update(payload).eq('id', id)
     else await sb.from('users').insert(payload)
-    setShowModal(false); setEditStudent(null); loadStudents(); toast('Student saved.')
+    setShowModal(false); setEditStudent(null); loadStudents(); toast('Saved.')
   }
 
   async function toggleActive(s) {
     await sb.from('users').update({ is_active: !s.is_active }).eq('id', s.id)
-    loadStudents(); toast(s.is_active ? 'Student deactivated.' : 'Student activated.')
+    loadStudents(); toast(s.is_active ? 'Deactivated.' : 'Activated.')
   }
 
   async function deleteStudent(id) {
-    if (!confirm('Delete this student?')) return
+    if (!confirm('Delete this user?')) return
     await sb.from('users').delete().eq('id', id)
-    loadStudents(); toast('Student deleted.')
+    loadStudents(); toast('Deleted.')
   }
 
   async function parseExcel(file) {
@@ -185,21 +183,20 @@ function StudentsPanel({ toast }) {
     setImporting(true)
     let added = 0
     for (const s of importPreview) {
-      const pin = Math.floor(1000 + Math.random() * 9000).toString()
-      const { error } = await sb.from('users').insert({ ...s, pin, role: 'student', is_active: true })
+      const { error } = await sb.from('users').insert({ ...s, role: 'student', is_active: true })
       if (!error) added++
     }
     setImportPreview(null); setImporting(false); loadStudents()
-    toast(`${added} students imported. PINs auto-assigned.`)
+    toast(`${added} users imported.`)
   }
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <div style={{ fontSize: 14, color: 'var(--text2)' }}>{students.length} student{students.length !== 1 ? 's' : ''}</div>
+        <div style={{ fontSize: 14, color: 'var(--text2)' }}>{students.length} user{students.length !== 1 ? 's' : ''}</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆️ Import Excel</button>
-          <button className="btn btn-sm btn-primary" onClick={() => { setEditStudent(null); setShowModal(true) }}>+ Add student</button>
+          <button className="btn btn-sm btn-primary" onClick={() => { setEditStudent(null); setShowModal(true) }}>+ Add user</button>
         </div>
       </div>
 
@@ -209,8 +206,7 @@ function StudentsPanel({ toast }) {
 
       {importPreview && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8 }}>Import preview — {importPreview.length} students</div>
-          <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>Columns: Name · Email · Phone · Degree · Year/Semester · Supervisor · Project Group</div>
+          <div style={{ fontWeight: 600, marginBottom: 8 }}>Import preview — {importPreview.length} users</div>
           {importPreview.slice(0,3).map((s,i) => <div key={i} style={{ fontSize: 13, padding: '2px 0', color: 'var(--text2)' }}>· {s.name}</div>)}
           {importPreview.length > 3 && <div style={{ fontSize: 12, color: 'var(--text3)' }}>…and {importPreview.length - 3} more</div>}
           <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
@@ -221,10 +217,10 @@ function StudentsPanel({ toast }) {
       )}
 
       {loading ? <div style={{ textAlign: 'center', padding: 24 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-        : students.length === 0 ? <div className="empty-state"><div className="empty-icon">👥</div>No students yet.</div>
+        : students.length === 0 ? <div className="empty-state"><div className="empty-icon">👥</div>No users yet.</div>
         : students.map(s => (
           <div key={s.id} className="card" style={{ padding: '12px 18px', marginBottom: 10, opacity: s.is_active ? 1 : 0.5 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div>
                 <div style={{ fontWeight: 600 }}>{s.name}
                   {s.role === 'admin' && <span style={{ marginLeft: 8, fontSize: 11, background: '#e0f2fe', color: '#0369a1', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Admin {s.admin_level || ''}</span>}
@@ -239,7 +235,7 @@ function StudentsPanel({ toast }) {
                   {s.project_group && <span>{s.project_group}</span>}
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn btn-sm" onClick={() => { setEditStudent(s); setShowModal(true) }}>Edit</button>
                 <button className="btn btn-sm" onClick={() => toggleActive(s)}>{s.is_active ? 'Deactivate' : 'Activate'}</button>
                 <button className="btn btn-sm btn-danger" onClick={() => deleteStudent(s.id)}>Delete</button>
@@ -277,15 +273,15 @@ function StudentModal({ student, onClose, onSave, supervisors = [] }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:520, width:'100%', maxHeight:'90vh', overflowY:'auto', border:'1px solid var(--border)' }}>
-        <div style={{ fontWeight:600, fontSize:16, marginBottom:20 }}>{student ? 'Edit student' : 'Add student'}</div>
+        <div style={{ fontWeight:600, fontSize:16, marginBottom:20 }}>{student ? 'Edit user' : 'Add user'}</div>
         <div className="grid-2">
           <div className="field"><label>Full Name *</label><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} autoFocus /></div>
           <div className="field"><label>Email *</label><input type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="netid@illinois.edu" /></div>
         </div>
         <div className="grid-2">
           <div className="field"><label>Password{student?' (leave blank to keep)':' *'}</label><input type="text" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder="Min. 6 chars" /></div>
-          <div className="field"><label>Admin Level</label>
-            <select value={form.admin_level||0} onChange={e=>setForm(f=>({...f,admin_level:parseInt(e.target.value),role:parseInt(e.target.value)>=1?'admin':f.role}))}>
+          <div className="field"><label>Role / Level</label>
+            <select value={form.admin_level||0} onChange={e=>setForm(f=>({...f,admin_level:parseInt(e.target.value),role:parseInt(e.target.value)>=1?'admin':parseInt(e.target.value)===-1?'user':'student'}))}>
               <option value={0}>Student</option>
               <option value={-1}>Staff / RE</option>
               <option value={1}>Admin 1</option>
@@ -294,31 +290,28 @@ function StudentModal({ student, onClose, onSave, supervisors = [] }) {
           </div>
         </div>
         <div className="grid-2">
-          <div className="field"><label>Email</label><input value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="netid@illinois.edu" /></div>
           <div className="field"><label>Phone</label><input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} /></div>
-        </div>
-        <div className="grid-2">
           <div className="field"><label>Degree</label>
             <select value={form.degree} onChange={e=>setForm(f=>({...f,degree:e.target.value}))}>
               <option value="">— Select —</option>
               {DEGREES_OPTS.map(d=><option key={d} value={d}>{d}</option>)}
             </select>
           </div>
-          <div className="field"><label>Year & Semester Entered</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
         </div>
         <div className="grid-2">
-          <div className="field"><label>Supervisor</label>
-            <select value={form.supervisor||''} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))}>
-              <option value="">— Select supervisor —</option>
-              {supervisors.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
-          </div>
+          <div className="field"><label>Year & Semester</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
           <div className="field"><label>Project Group</label>
             <select value={form.project_group} onChange={e=>setForm(f=>({...f,project_group:e.target.value}))}>
               <option value="">— Select —</option>
               {GROUPS_OPTS.map(g=><option key={g} value={g}>{g}</option>)}
             </select>
           </div>
+        </div>
+        <div className="field"><label>Supervisor</label>
+          <select value={form.supervisor||''} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))}>
+            <option value="">— Select supervisor —</option>
+            {supervisors.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
         </div>
         <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <button className="btn btn-primary" onClick={()=>onSave(form, student?.id)}>Save</button>
@@ -419,7 +412,6 @@ function UserProfile({ session }) {
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}><div className="section-title">My Profile</div><HelpPanel screen="profile" /></div>
 
-      {/* Header card */}
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
         <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--surface2)', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {avatarContent}
@@ -436,7 +428,6 @@ function UserProfile({ session }) {
         </div>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
         {[{ key: 'info', label: '👤 Info' }, { key: 'avatar', label: '🖼️ Photo' }, { key: 'pin', label: '🔑 Password' }].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
@@ -446,7 +437,6 @@ function UserProfile({ session }) {
         ))}
       </div>
 
-      {/* Info tab */}
       {activeTab === 'info' && (
         <div className="card">
           <div className="grid-2">
@@ -490,7 +480,6 @@ function UserProfile({ session }) {
         </div>
       )}
 
-      {/* Photo tab */}
       {activeTab === 'avatar' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, padding: '12px 16px', background: 'var(--surface2)', borderRadius: 'var(--radius-lg)' }}>
@@ -516,18 +505,17 @@ function UserProfile({ session }) {
         </div>
       )}
 
-      {/* PIN tab */}
       {activeTab === 'pin' && (
         <div className="card">
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Change password</div>
           <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Your password must be at least 6 characters.</div>
-          <div className="field"><label>Current PIN</label><input type="password" value={pinForm.current} onChange={e => { setPinForm(f => ({ ...f, current: e.target.value })); setPinError('') }} placeholder="Current password" /></div>
+          <div className="field"><label>Current password</label><input type="password" value={pinForm.current} onChange={e => { setPinForm(f => ({ ...f, current: e.target.value })); setPinError('') }} placeholder="Current password" /></div>
           <div className="grid-2">
-            <div className="field"><label>New PIN</label><input type="password" value={pinForm.newPin} onChange={e => { setPinForm(f => ({ ...f, newPin: e.target.value })); setPinError('') }} placeholder="Min. 6 characters" /></div>
-            <div className="field"><label>Confirm new PIN</label><input type="password" value={pinForm.confirm} onChange={e => { setPinForm(f => ({ ...f, confirm: e.target.value })); setPinError('') }} placeholder="Confirm new password" /></div>
+            <div className="field"><label>New password</label><input type="password" value={pinForm.newPin} onChange={e => { setPinForm(f => ({ ...f, newPin: e.target.value })); setPinError('') }} placeholder="Min. 6 characters" /></div>
+            <div className="field"><label>Confirm new password</label><input type="password" value={pinForm.confirm} onChange={e => { setPinForm(f => ({ ...f, confirm: e.target.value })); setPinError('') }} placeholder="Confirm new password" /></div>
           </div>
           {pinError && <div style={{ fontSize: 13, color: 'var(--accent2)', marginBottom: 12 }}>⚠️ {pinError}</div>}
-          <button className="btn btn-primary" onClick={savePin} disabled={!pinForm.current || !pinForm.newPin || !pinForm.confirm}>Update PIN</button>
+          <button className="btn btn-primary" onClick={savePin} disabled={!pinForm.current || !pinForm.newPin || !pinForm.confirm}>Update password</button>
         </div>
       )}
     </div>
@@ -542,7 +530,6 @@ export default function Profile() {
   if (session?.role === 'admin') return <AdminProfile />
   return <UserProfile session={session} />
 }
-
 
 // ── Access Control Panel ──────────────────────────────────────
 function AccessControl({ toast, session }) {
@@ -580,7 +567,6 @@ function AccessControl({ toast, session }) {
       data.forEach(r => { map[r.screen_key] = true })
       setAccess(map)
     } else {
-      // Default: all screens enabled
       const map = {}
       ALL_SCREENS.forEach(s => { map[s.key] = true })
       setAccess(map)
@@ -590,7 +576,6 @@ function AccessControl({ toast, session }) {
   async function saveAccess() {
     if (!selected) return
     setSaving(true)
-    // Delete existing, re-insert
     await sb.from('user_screen_access').delete().eq('user_id', selected.id)
     const rows = Object.entries(access).filter(([, v]) => v).map(([key]) => ({ user_id: selected.id, screen_key: key }))
     if (rows.length) await sb.from('user_screen_access').insert(rows)
@@ -609,7 +594,6 @@ function AccessControl({ toast, session }) {
 
   return (
     <div>
-      {/* Admin level assignment */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>👑 Admin Level Assignment</div>
         <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Assign Admin 1 or Admin 2 access to staff members.</div>
@@ -634,7 +618,6 @@ function AccessControl({ toast, session }) {
         </div>
       </div>
 
-      {/* Screen access per user */}
       <div className="card">
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>🗂️ Module Access</div>
         <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Select a staff member to control which modules they can access.</div>
@@ -659,6 +642,136 @@ function AccessControl({ toast, session }) {
             <button className="btn btn-primary" onClick={saveAccess} disabled={saving}>{saving ? 'Saving…' : `Save access for ${selected.name}`}</button>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ── Icon Image Manager ────────────────────────────────────────
+function IconImageManager({ toast }) {
+  const ALL_MODULES = [
+    { key: 'supply',      label: 'Supply Inventory',   icon: '📦', bg: '#e8f2ee', color: '#2a6049' },
+    { key: 'projects',    label: 'Project Inventory',  icon: '🧪', bg: '#f3eeff', color: '#7c4dbd' },
+    { key: 'training',    label: 'Training Records',   icon: '🎓', bg: '#e0f2fe', color: '#0369a1' },
+    { key: 'equipment',   label: 'Equipment Inventory',icon: '🔧', bg: '#fef3c7', color: '#92400e' },
+    { key: 'equipmenthub',label: 'Equipment',          icon: '📚', bg: '#e8f2ee', color: '#1e4d39' },
+    { key: 'booking',     label: 'Booking Equipment',  icon: '📅', bg: '#e0f2fe', color: '#0369a1' },
+    { key: 'mileage',     label: 'Mileage Form',       icon: '🚗', bg: '#fdf0ed', color: '#c84b2f' },
+    { key: 'labsafety',   label: 'Lab Safety',         icon: '🦺', bg: '#fef3c7', color: '#92400e' },
+    { key: 'remessages',  label: 'Research Engineers', icon: '💬', bg: '#e8f2ee', color: '#2a6049' },
+    { key: 'profile',     label: 'Profile',            icon: '👤', bg: '#f3eeff', color: '#7c4dbd' },
+  ]
+
+  const [images, setImages] = useState({})
+  const [uploading, setUploading] = useState(null)
+  const fileRefs = useRef({})
+
+  useEffect(() => { loadImages() }, [])
+
+  async function loadImages() {
+    const keys = ALL_MODULES.map(m => `img_${m.key}`)
+    const { data } = await sb.from('settings').select('key, value').in('key', keys)
+    const map = {}
+    ;(data || []).forEach(r => { map[r.key.replace('img_', '')] = r.value })
+    setImages(map)
+  }
+
+  async function uploadImage(moduleKey, file) {
+    if (!file?.type.startsWith('image/')) { toast('Please select an image file.'); return }
+    setUploading(moduleKey)
+    try {
+      const compressed = await new Promise(resolve => {
+        const img = new Image()
+        const url = URL.createObjectURL(file)
+        img.onload = () => {
+          const maxW = 800, maxH = 500
+          const scale = Math.min(1, maxW / img.width, maxH / img.height)
+          const canvas = document.createElement('canvas')
+          canvas.width = Math.round(img.width * scale)
+          canvas.height = Math.round(img.height * scale)
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height)
+          URL.revokeObjectURL(url)
+          canvas.toBlob(resolve, 'image/jpeg', 0.82)
+        }
+        img.src = url
+      })
+      const path = `module-icons/${moduleKey}_${Date.now()}.jpg`
+      const { error } = await sb.storage.from('project-files').upload(path, compressed, { contentType: 'image/jpeg', upsert: true })
+      if (error) throw error
+      const publicUrl = sb.storage.from('project-files').getPublicUrl(path).data.publicUrl
+      await sb.from('settings').upsert({ key: `img_${moduleKey}`, value: publicUrl })
+      setImages(prev => ({ ...prev, [moduleKey]: publicUrl }))
+      toast(`Image updated for ${ALL_MODULES.find(m => m.key === moduleKey)?.label} ✓`)
+    } catch(e) {
+      toast('Upload failed. Make sure the project-files storage bucket exists.')
+    }
+    setUploading(null)
+  }
+
+  async function removeImage(moduleKey) {
+    await sb.from('settings').delete().eq('key', `img_${moduleKey}`)
+    setImages(prev => { const n = { ...prev }; delete n[moduleKey]; return n })
+    toast('Image removed.')
+  }
+
+  return (
+    <div>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>🖼️ Dashboard Icon Images</div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 4, lineHeight: 1.6 }}>
+          Upload a background photo for each dashboard card. Photos create a full-image background with a white label overlay. Cards without a photo show the default color and emoji.
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--text3)' }}>Recommended size: 800×500px or wider. JPG, PNG, or WebP.</div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 16 }}>
+        {ALL_MODULES.map(m => {
+          const img = images[m.key]
+          return (
+            <div key={m.key} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
+              {/* Preview card */}
+              <div style={{ height: 130, position: 'relative', background: m.bg, cursor: 'pointer' }}
+                onClick={() => fileRefs.current[m.key]?.click()}>
+                {img && <img src={img} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                {/* Gradient overlay */}
+                <div style={{ position: 'absolute', inset: 0, background: img ? 'linear-gradient(to top, rgba(0,0,0,0.65) 35%, rgba(0,0,0,0.05) 100%)' : 'transparent' }} />
+                {/* Emoji shown when no image */}
+                {!img && (
+                  <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40, opacity: 0.5 }}>{m.icon}</div>
+                )}
+                {/* Label at bottom */}
+                {img && (
+                  <div style={{ position: 'absolute', bottom: 8, left: 10, right: 10 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.5)' }}>{m.label}</div>
+                  </div>
+                )}
+                {/* Upload hover overlay */}
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.2s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,0.25)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'rgba(0,0,0,0)'}>
+                  <div style={{ background: 'rgba(255,255,255,0.92)', borderRadius: 8, padding: '5px 14px', fontSize: 12, fontWeight: 500, color: '#1a1916', pointerEvents: 'none' }}>
+                    {uploading === m.key ? '⏳ Uploading…' : '📷 Click to upload'}
+                  </div>
+                </div>
+                <input ref={el => fileRefs.current[m.key] = el} type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => { if (e.target.files[0]) uploadImage(m.key, e.target.files[0]) }} />
+              </div>
+
+              {/* Card footer */}
+              <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.icon} {m.label}</div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 10px' }}
+                    onClick={() => fileRefs.current[m.key]?.click()}
+                    disabled={uploading === m.key}>
+                    {uploading === m.key ? '⏳' : img ? 'Change' : 'Upload'}
+                  </button>
+                  {img && <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => removeImage(m.key)}>✕</button>}
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </div>
   )
