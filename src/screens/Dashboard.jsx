@@ -81,6 +81,205 @@ function CardGridView({ modules, onNavigate, mileageUrl, labSafetyUrl, isAdmin, 
   )
 }
 
+// ══════════════════════════════════════════════════════════════
+// STUDENT DASHBOARD VIEW
+// ══════════════════════════════════════════════════════════════
+function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, moduleImages }) {
+  const [data, setData] = useState({
+    myProjects: 0,
+    trainingsComplete: 0,
+    trainingsTotal: 4, // fresh, golf car, equipment, alarm
+    upcomingBookings: [],
+    pendingCert: false,
+  })
+  const [loading, setLoading] = useState(true)
+  const [confirmExternal, setConfirmExternal] = useState(null)
+
+  useEffect(() => { if (session?.userId) loadStudentData() }, [session?.userId])
+
+  async function loadStudentData() {
+    setLoading(true)
+    try {
+      const userId = session.userId
+      const userName = session.username
+
+      // Count projects assigned to this student
+      const { data: projects } = await sb.from('projects').select('id, title, status')
+        .or(`students.cs.{"${userName}"},students.ilike.%${userName}%`)
+        .eq('status', 'active')
+
+      // Check training completions for this user
+      const [freshRes, golfRes, alarmRes, eqRes, pendingRes, bookingsRes] = await Promise.all([
+        sb.from('training_fresh').select('id, admin_approved').eq('user_id', userId).maybeSingle(),
+        sb.from('training_golf_car').select('id').eq('user_id', userId).maybeSingle(),
+        sb.from('training_building_alarm').select('id').eq('user_id', userId).maybeSingle(),
+        sb.from('training_equipment').select('id').eq('user_id', userId).limit(1),
+        sb.from('training_fresh').select('id').eq('user_id', userId).eq('admin_approved', false).maybeSingle(),
+        sb.from('equipment_bookings').select('id, equipment_name, start_time, end_time, status')
+          .eq('user_id', userId)
+          .gte('start_time', new Date().toISOString())
+          .order('start_time').limit(3),
+      ])
+
+      let done = 0
+      if (freshRes.data?.admin_approved) done++
+      if (golfRes.data) done++
+      if (alarmRes.data) done++
+      if (eqRes.data?.length) done++
+
+      setData({
+        myProjects: projects?.length || 0,
+        trainingsComplete: done,
+        trainingsTotal: 4,
+        upcomingBookings: bookingsRes.data || [],
+        pendingCert: !!pendingRes.data,
+      })
+    } catch(e) {}
+    setLoading(false)
+  }
+
+  const trainingPct = Math.round((data.trainingsComplete / data.trainingsTotal) * 100)
+  const trainingColor = trainingPct === 100 ? '#2a6049' : trainingPct >= 50 ? '#0369a1' : '#c84b2f'
+
+  const quickLinks = [
+    { key: 'projects',    icon: '🧪', label: 'My Projects',       sub: 'View assigned projects',      screen: 'projects',    color: '#7c4dbd' },
+    { key: 'training',    icon: '🎓', label: 'Training Records',   sub: 'Check your certs',            screen: 'training',    color: '#0369a1' },
+    { key: 'booking',     icon: '📅', label: 'Book Equipment',     sub: 'Reserve lab equipment',       screen: 'booking',     color: '#0369a1' },
+    { key: 'equipmenthub',icon: '📚', label: 'Equipment Info',     sub: 'SOPs & standards',            screen: 'equipmenthub',color: '#1e4d39' },
+    { key: 'remessages',  icon: '💬', label: 'Contact Lab Manager',sub: 'Ask REs a question',          screen: 'remessages',  color: '#2a6049' },
+    { key: 'mileage',     icon: '🚗', label: 'Mileage Form',       sub: 'Submit reimbursement',        screen: null,          color: '#c84b2f', external: true },
+  ]
+
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 20, alignItems: 'start' }}>
+        <div>
+          {/* Stat cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
+            {/* My Projects */}
+            <div onClick={() => onNavigate('projects')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#7c4dbd'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+              <div style={{ fontSize: 28, fontWeight: 600, color: '#7c4dbd', marginBottom: 4 }}>{loading ? '—' : data.myProjects}</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>My active projects</div>
+            </div>
+
+            {/* Training progress */}
+            <div onClick={() => onNavigate('training')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = trainingColor}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+              <div style={{ fontSize: 28, fontWeight: 600, color: trainingColor, marginBottom: 4 }}>
+                {loading ? '—' : `${data.trainingsComplete}/${data.trainingsTotal}`}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>Trainings complete</div>
+              {!loading && (
+                <div style={{ height: 4, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${trainingPct}%`, background: trainingColor, borderRadius: 99, transition: 'width 0.6s' }} />
+                </div>
+              )}
+            </div>
+
+            {/* Upcoming bookings */}
+            <div onClick={() => onNavigate('booking')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = '#0369a1'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+              <div style={{ fontSize: 28, fontWeight: 600, color: '#0369a1', marginBottom: 4 }}>{loading ? '—' : data.upcomingBookings.length}</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>Upcoming bookings</div>
+            </div>
+
+            {/* Cert status */}
+            <div onClick={() => onNavigate('training')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = data.pendingCert ? '#c84b2f' : '#2a6049'}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+              <div style={{ fontSize: 24, marginBottom: 4 }}>{loading ? '—' : data.pendingCert ? '⏳' : '✅'}</div>
+              <div style={{ fontSize: 13, color: 'var(--text2)' }}>{data.pendingCert ? 'Cert pending approval' : 'Cert up to date'}</div>
+            </div>
+          </div>
+
+          {/* Upcoming bookings detail */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Upcoming bookings</div>
+            {loading ? <div style={{ textAlign: 'center', padding: 16 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+              : data.upcomingBookings.length === 0
+              ? <div style={{ fontSize: 13, color: 'var(--text3)', textAlign: 'center', padding: '12px 0' }}>No upcoming bookings. <span onClick={() => onNavigate('booking')} style={{ color: 'var(--accent)', cursor: 'pointer' }}>Book equipment →</span></div>
+              : data.upcomingBookings.map(b => {
+                  const start = new Date(b.start_time)
+                  return (
+                    <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--surface2)' }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 500 }}>{b.equipment_name || 'Equipment'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                          {start.toLocaleDateString()} · {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 11, color: b.status === 'confirmed' ? '#2a6049' : '#0369a1', background: b.status === 'confirmed' ? '#e8f2ee' : '#e0f2fe', borderRadius: 4, padding: '2px 8px', fontWeight: 500 }}>
+                        {b.status || 'Pending'}
+                      </span>
+                    </div>
+                  )
+                })
+            }
+          </div>
+
+          {/* Training checklist */}
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Training checklist</div>
+              <span onClick={() => onNavigate('training')} style={{ fontSize: 12, color: 'var(--accent)', cursor: 'pointer', fontWeight: 500 }}>View all →</span>
+            </div>
+            {[
+              { label: 'Fresh Student Training', done: data.trainingsComplete >= 1, note: data.pendingCert ? 'Pending approval' : null },
+              { label: 'Golf Car Safety', done: data.trainingsComplete >= 2 },
+              { label: 'Equipment Training', done: data.trainingsComplete >= 3 },
+              { label: 'Building Alarm', done: data.trainingsComplete >= 4 },
+            ].map((t, i) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 0', borderBottom: i < 3 ? '1px solid var(--surface2)' : 'none' }}>
+                <div style={{ width: 22, height: 22, borderRadius: '50%', background: t.done ? '#2a6049' : 'var(--surface2)', border: `2px solid ${t.done ? '#2a6049' : 'var(--border)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {t.done && <span style={{ color: '#fff', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: t.done ? 'var(--text)' : 'var(--text2)' }}>{t.label}</div>
+                  {t.note && <div style={{ fontSize: 11, color: '#c84b2f' }}>{t.note}</div>}
+                </div>
+                {!t.done && <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text3)' }}>Incomplete</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right sidebar — quick access */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Quick access</div>
+          {quickLinks.map(m => (
+            <div key={m.key}
+              onClick={() => m.external ? setConfirmExternal({ url: mileageUrl }) : onNavigate(m.screen)}
+              style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', cursor: 'pointer', height: 56, position: 'relative', border: '1px solid var(--border)', transition: 'all 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = m.color}
+              onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+              {moduleImages[m.key]
+                ? (<><img src={moduleImages[m.key]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} /><div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to right, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 100%)' }} /></>)
+                : <div style={{ position: 'absolute', inset: 0, background: `${m.color}18` }} />
+              }
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', gap: 12, padding: '0 14px' }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>{m.icon}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: moduleImages[m.key] ? '#fff' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.label}</div>
+                  <div style={{ fontSize: 10, color: moduleImages[m.key] ? 'rgba(255,255,255,0.75)' : 'var(--text3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sub}</div>
+                </div>
+                {m.external && <span style={{ fontSize: 10, color: 'var(--text3)', flexShrink: 0 }}>↗</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {confirmExternal && <ExternalLinkModal url={confirmExternal.url} onConfirm={() => { window.open(confirmExternal.url, '_blank'); setConfirmExternal(null) }} onCancel={() => setConfirmExternal(null)} />}
+    </>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// ADMIN DASHBOARD VIEW
+// ══════════════════════════════════════════════════════════════
 function DashboardView({ modules, onNavigate, session, mileageUrl, labSafetyUrl, isAdmin, onEditUrl, moduleImages }) {
   const [stats, setStats] = useState({ lowSupplies: 0, activeProjects: 0, students: 0, pendingTraining: 0 })
   const [recentInspections, setRecentInspections] = useState([])
@@ -174,6 +373,7 @@ export default function Dashboard() {
   const [userAccess, setUserAccess] = useState(null)
   const [moduleImages, setModuleImages] = useState({})
   const isAdmin = session?.role === 'admin'
+  const isStudent = session?.role === 'student'
 
   useEffect(() => {
     if (session?.userId && (session?.role === 'user' || session?.role === 'admin')) {
@@ -218,6 +418,9 @@ export default function Dashboard() {
   const now = new Date()
   const dateStr = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`
 
+  // Students only see Cards and their own Dashboard — no admin stats
+  const showDashboardToggle = !isStudent
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28, flexWrap: 'wrap', gap: 12 }}>
@@ -226,16 +429,37 @@ export default function Dashboard() {
           <div style={{ fontSize: 13, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{dateStr} · ICT Lab</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: 3, gap: 2 }}>
-            <button onClick={() => switchView('grid')} style={{ padding: '6px 14px', border: 'none', borderRadius: 8, fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: view === 'grid' ? 'var(--surface)' : 'transparent', color: view === 'grid' ? 'var(--text)' : 'var(--text2)', transition: 'all 0.15s' }}>⊞ Cards</button>
-            <button onClick={() => switchView('dashboard')} style={{ padding: '6px 14px', border: 'none', borderRadius: 8, fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: view === 'dashboard' ? 'var(--surface)' : 'transparent', color: view === 'dashboard' ? 'var(--text)' : 'var(--text2)', transition: 'all 0.15s' }}>☰ Dashboard</button>
-          </div>
+          {showDashboardToggle && (
+            <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: 3, gap: 2 }}>
+              <button onClick={() => switchView('grid')} style={{ padding: '6px 14px', border: 'none', borderRadius: 8, fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: view === 'grid' ? 'var(--surface)' : 'transparent', color: view === 'grid' ? 'var(--text)' : 'var(--text2)', transition: 'all 0.15s' }}>⊞ Cards</button>
+              <button onClick={() => switchView('dashboard')} style={{ padding: '6px 14px', border: 'none', borderRadius: 8, fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: view === 'dashboard' ? 'var(--surface)' : 'transparent', color: view === 'dashboard' ? 'var(--text)' : 'var(--text2)', transition: 'all 0.15s' }}>☰ Dashboard</button>
+            </div>
+          )}
+          {isStudent && (
+            <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: 3, gap: 2 }}>
+              <button onClick={() => switchView('grid')} style={{ padding: '6px 14px', border: 'none', borderRadius: 8, fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: view === 'grid' ? 'var(--surface)' : 'transparent', color: view === 'grid' ? 'var(--text)' : 'var(--text2)', transition: 'all 0.15s' }}>⊞ Cards</button>
+              <button onClick={() => switchView('dashboard')} style={{ padding: '6px 14px', border: 'none', borderRadius: 8, fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer', background: view === 'dashboard' ? 'var(--surface)' : 'transparent', color: view === 'dashboard' ? 'var(--text)' : 'var(--text2)', transition: 'all 0.15s' }}>📋 My Activity</button>
+            </div>
+          )}
         </div>
       </div>
-      {view === 'grid'
-        ? <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} moduleImages={moduleImages} />
-        : <DashboardView modules={modules} onNavigate={s => setScreen(s)} session={session} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} moduleImages={moduleImages} />
-      }
+
+      {/* STUDENT: show student dashboard or card grid */}
+      {isStudent && view === 'dashboard' && (
+        <StudentDashboardView session={session} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} moduleImages={moduleImages} />
+      )}
+      {isStudent && view === 'grid' && (
+        <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={false} onEditUrl={() => {}} moduleImages={moduleImages} />
+      )}
+
+      {/* ADMIN/STAFF: original views */}
+      {!isStudent && view === 'grid' && (
+        <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} moduleImages={moduleImages} />
+      )}
+      {!isStudent && view === 'dashboard' && (
+        <DashboardView modules={modules} onNavigate={s => setScreen(s)} session={session} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} moduleImages={moduleImages} />
+      )}
+
       {editingUrl !== null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 28, maxWidth: 480, width: '100%', border: '1px solid var(--border)' }}>
