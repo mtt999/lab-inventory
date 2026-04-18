@@ -4,7 +4,7 @@ import { useState } from 'react'
 
 export default function Login() {
   const { setSession } = useAppStore()
-  const [email, setEmail] = useState('')
+  const [identifier, setIdentifier] = useState('') // email OR name
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -12,25 +12,59 @@ export default function Login() {
 
   async function handleLogin(e) {
     e.preventDefault()
-    if (!email.trim() || !password.trim()) { setError('Please enter email and password.'); return }
+    if (!identifier.trim() || !password.trim()) { setError('Please enter your ID and password.'); return }
     setLoading(true); setError('')
-    const emailLower = email.trim().toLowerCase()
+
+    const identifierLower = identifier.trim().toLowerCase()
+
+    // 1. Check owner admin
     const { data: adminSettings } = await sb.from('settings').select('value').eq('key', 'admin_email').maybeSingle()
     const adminEmail = adminSettings?.value || 'motlagh999@gmail.com'
     const { data: adminPass } = await sb.from('settings').select('value').eq('key', 'admin_password').maybeSingle()
-    const { data: users } = await sb.from('users').select('*').eq('is_active', true).eq('email', emailLower)
-    const user = users?.[0]
-    if (!user) {
-      if (emailLower === adminEmail.toLowerCase() && password === (adminPass?.value || 'Motlagh@2026')) {
-        setSession({ role: 'admin', username: 'Admin', userId: null, adminLevel: 3 })
-        setLoading(false); return
-      }
-      setError('No account found with this email.'); setLoading(false); return
+    if (identifierLower === adminEmail.toLowerCase() && password === (adminPass?.value || 'Motlagh@2026')) {
+      setSession({ role: 'admin', username: 'Admin', userId: null, adminLevel: 3 })
+      setLoading(false); return
     }
-    if (user.password !== password) { setError('Incorrect password.'); setLoading(false); return }
+
+    // 2. Try matching by email first
+    let user = null
+    const { data: byEmail } = await sb.from('users').select('*').eq('is_active', true).ilike('email', identifierLower)
+    if (byEmail?.length) user = byEmail[0]
+
+    // 3. If no email match, try matching by name (case-insensitive)
+    if (!user) {
+      const { data: byName } = await sb.from('users').select('*').eq('is_active', true).ilike('name', identifier.trim())
+      if (byName?.length) user = byName[0]
+    }
+
+    if (!user) {
+      setError('No account found. Try your name or email.')
+      setLoading(false); return
+    }
+
+    // 4. Check password
+    if (!user.password) {
+      setError('No password set for this account. Contact your admin.')
+      setLoading(false); return
+    }
+
+    if (user.password !== password) {
+      setError('Incorrect password.')
+      setLoading(false); return
+    }
+
+    // 5. Set session
     const adminLevel = user.admin_level || 0
     const role = user.role === 'admin' || adminLevel >= 1 ? 'admin' : user.role
-    setSession({ role, username: user.name, userId: user.id, email: user.email, adminLevel, photoUrl: user.photo_url, avatar: user.avatar })
+    setSession({
+      role,
+      username: user.name,
+      userId: user.id,
+      email: user.email,
+      adminLevel,
+      photoUrl: user.photo_url,
+      avatar: user.avatar,
+    })
     setLoading(false)
   }
 
@@ -48,17 +82,32 @@ export default function Login() {
 
         <div className="card" style={{ padding: 32 }}>
           <div style={{ fontWeight: 700, fontSize: 20, marginBottom: 4 }}>Sign in</div>
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>Enter your email and password to continue</div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>Use your name or email with your password</div>
           <form onSubmit={handleLogin}>
             <div className="field">
-              <label>Email address</label>
-              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setError('') }} placeholder="netid@illinois.edu" autoComplete="email" autoFocus />
+              <label>Name or Email address</label>
+              <input
+                type="text"
+                value={identifier}
+                onChange={e => { setIdentifier(e.target.value); setError('') }}
+                placeholder="Your name or netid@illinois.edu"
+                autoComplete="username"
+                autoFocus
+              />
             </div>
             <div className="field">
               <label>Password</label>
               <div style={{ position: 'relative' }}>
-                <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => { setPassword(e.target.value); setError('') }} placeholder="••••••••" autoComplete="current-password" style={{ paddingRight: 44 }} />
-                <button type="button" onClick={() => setShowPassword(s => !s)} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text3)', padding: 4 }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  style={{ paddingRight: 44 }}
+                />
+                <button type="button" onClick={() => setShowPassword(s => !s)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text3)', padding: 4 }}>
                   {showPassword ? '🙈' : '👁️'}
                 </button>
               </div>
@@ -70,6 +119,7 @@ export default function Login() {
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
+
           <div style={{ marginTop: 20, padding: '12px 16px', background: 'var(--surface2)', borderRadius: 8, fontSize: 12, color: 'var(--text3)', lineHeight: 1.7 }}>
             <div style={{ fontWeight: 500, color: 'var(--text2)', marginBottom: 2 }}>Forgot User ID or Password?</div>
             <div>Contact Research Engineers at ICT</div>
