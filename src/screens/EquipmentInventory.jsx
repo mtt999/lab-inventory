@@ -20,20 +20,15 @@ const LOCATIONS = [
   'Servo Room', 'Shed', 'Soils Lab', 'Storage', 'Volumetric Lab', 'Other',
 ]
 
-// ── Helpers ───────────────────────────────────────────────────
-function canEdit(session) {
-  return session?.role === 'admin' || session?.role === 'user'
-}
+function canEdit(session) { return session?.role === 'admin' || session?.role === 'user' }
 function isAdmin(session) { return session?.role === 'admin' }
 
-
-// ── Equipment Modal ───────────────────────────────────────────
 function EquipmentModal({ item, onClose, onSaved, session }) {
   const { toast } = useAppStore()
   const blank = {
     equipment_name: '', nickname: '', location: '', category: '',
     ref_id: '', model_number: '', serial_number: '', manufacturer: '',
-    date_received: '', condition: 'Good', notes: '',
+    date_received: '', condition: 'Good', notes: '', out_of_service: false,
     maintenance_interval_days: '', last_maintenance_date: '', next_maintenance_date: '',
   }
   const [form, setForm] = useState(item ? {
@@ -48,6 +43,7 @@ function EquipmentModal({ item, onClose, onSaved, session }) {
     date_received: item.date_received || '',
     condition: item.condition || 'Good',
     notes: item.notes || '',
+    out_of_service: item.out_of_service || false,
     maintenance_interval_days: item.maintenance_interval_days || '',
     last_maintenance_date: item.last_maintenance_date || '',
     next_maintenance_date: item.next_maintenance_date || '',
@@ -66,6 +62,7 @@ function EquipmentModal({ item, onClose, onSaved, session }) {
     setSaving(true)
     const payload = {
       ...form,
+      out_of_service: form.out_of_service || false,
       date_received: form.date_received || null,
       maintenance_interval_days: form.maintenance_interval_days ? parseInt(form.maintenance_interval_days) : null,
       last_maintenance_date: form.last_maintenance_date || null,
@@ -91,7 +88,6 @@ function EquipmentModal({ item, onClose, onSaved, session }) {
           <button className="btn btn-sm" onClick={onClose}>✕</button>
         </div>
         <div style={{ padding: 20 }}>
-          {/* Basic info */}
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>Basic Info</div>
           <div className="grid-2">
             <div className="field"><label>Equipment Name *</label><input value={form.equipment_name} onChange={e => setForm(f => ({ ...f, equipment_name: e.target.value }))} placeholder="e.g. Gyratory Compactor" autoFocus /></div>
@@ -128,7 +124,19 @@ function EquipmentModal({ item, onClose, onSaved, session }) {
             </div>
           </div>
 
-          {/* Maintenance */}
+          {/* Out of Service */}
+          <div className="field">
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: 0 }}>
+              <input type="checkbox" checked={form.out_of_service || false}
+                onChange={e => setForm(f => ({ ...f, out_of_service: e.target.checked }))}
+                style={{ width: 'auto' }} />
+              <span style={{ color: form.out_of_service ? 'var(--accent2)' : 'var(--text2)', fontWeight: 500 }}>
+                ⛔ Mark as Out of Service
+              </span>
+            </label>
+            {form.out_of_service && <div style={{ fontSize: 12, color: 'var(--accent2)', marginTop: 4 }}>This equipment will be flagged in the equipment list and cannot be booked.</div>}
+          </div>
+
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', margin: '16px 0 12px' }}>Maintenance</div>
           <div className="grid-2">
             <div className="field"><label>Interval (days)</label><input type="number" value={form.maintenance_interval_days} onChange={e => {
@@ -144,10 +152,9 @@ function EquipmentModal({ item, onClose, onSaved, session }) {
           </div>
           <div className="field">
             <label>Next Maintenance (auto-calculated)</label>
-            <input type="date" value={form.next_maintenance_date} onChange={e => setForm(f => ({ ...f, next_maintenance_date: e.target.value }))} style={{ background: form.next_maintenance_date ? 'var(--surface2)' : '' }} />
+            <input type="date" value={form.next_maintenance_date} onChange={e => setForm(f => ({ ...f, next_maintenance_date: e.target.value }))} />
           </div>
 
-          {/* Notes */}
           <div className="field"><label>Notes</label><textarea rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ resize: 'vertical' }} /></div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
@@ -160,9 +167,6 @@ function EquipmentModal({ item, onClose, onSaved, session }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// TAB 1 — LIST OF EQUIPMENT
-// ══════════════════════════════════════════════════════════════
 function EquipmentList({ session }) {
   const { toast } = useAppStore()
   const [items, setItems] = useState([])
@@ -192,7 +196,6 @@ function EquipmentList({ session }) {
     load(); toast('Equipment removed.')
   }
 
-  // Excel import
   async function parseExcel(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -215,14 +218,12 @@ function EquipmentList({ session }) {
             }
             const name = get('equipment name', 'equipment')
             if (!name) continue
-            // Parse date
             let dateReceived = null
             const dateRaw = get('date received', 'date')
             if (dateRaw) {
               const d = new Date(dateRaw)
               if (!isNaN(d)) dateReceived = d.toISOString().split('T')[0]
             }
-            // Normalize location
             const locRaw = get('location')
             const locNorm = Object.entries({
               'Binder Lab': ['binder lab', 'binder'],
@@ -250,6 +251,7 @@ function EquipmentList({ session }) {
               manufacturer: get('manufacturer'),
               date_received: dateReceived,
               condition: 'Good',
+              out_of_service: false,
             })
           }
           resolve(items)
@@ -276,17 +278,16 @@ function EquipmentList({ session }) {
 
   function exportToExcel() {
     const data = [
-      ['Equipment Name', 'Nickname', 'Location', 'Category', 'Ref ID', 'Model Number', 'Serial Number', 'Manufacturer', 'Date Received', 'Condition', 'Notes'],
-      ...filtered.map(i => [i.equipment_name, i.nickname, i.location, i.category, i.ref_id, i.model_number, i.serial_number, i.manufacturer, i.date_received, i.condition, i.notes])
+      ['#', 'Equipment Name', 'Nickname', 'Location', 'Category', 'Ref ID', 'Model Number', 'Serial Number', 'Manufacturer', 'Date Received', 'Condition', 'Out of Service', 'Notes'],
+      ...filtered.map((i, idx) => [idx + 1, i.equipment_name, i.nickname, i.location, i.category, i.ref_id, i.model_number, i.serial_number, i.manufacturer, i.date_received, i.condition, i.out_of_service ? 'Yes' : 'No', i.notes])
     ]
     const ws = XLSX.utils.aoa_to_sheet(data)
-    ws['!cols'] = [{ wch: 30 }, { wch: 20 }, { wch: 16 }, { wch: 28 }, { wch: 10 }, { wch: 24 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 12 }, { wch: 30 }]
+    ws['!cols'] = [{ wch: 4 }, { wch: 30 }, { wch: 20 }, { wch: 16 }, { wch: 28 }, { wch: 10 }, { wch: 24 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 12 }, { wch: 14 }, { wch: 30 }]
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Equipment')
     XLSX.writeFile(wb, `ICT_Equipment_${new Date().toLocaleDateString('en-CA')}.xlsx`)
   }
 
-  // Filter
   const filtered = items.filter(i => {
     const q = search.toLowerCase()
     const matchSearch = !q || [i.equipment_name, i.nickname, i.manufacturer, i.serial_number, i.model_number].some(f => f?.toLowerCase().includes(q))
@@ -296,7 +297,6 @@ function EquipmentList({ session }) {
     return matchSearch && matchCat && matchLoc && matchCond
   })
 
-  // Group by category
   const grouped = {}
   filtered.forEach(i => {
     const cat = i.category || 'Uncategorized'
@@ -307,9 +307,11 @@ function EquipmentList({ session }) {
   const condColor = { Good: '#1e4d39', Fair: '#92400e', Poor: '#c84b2f', 'Out of Service': '#a32d2d' }
   const condBg = { Good: '#e8f2ee', Fair: '#fef3c7', Poor: '#fdf0ed', 'Out of Service': '#fcebeb' }
 
+  // Running counter across all groups
+  let rowNum = 0
+
   return (
     <div>
-      {/* Toolbar */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Search equipment…" style={{ flex: 1, minWidth: 180 }} />
         <select value={filterCat} onChange={e => setFilterCat(e.target.value)} style={{ width: 'auto' }}>
@@ -326,7 +328,6 @@ function EquipmentList({ session }) {
         </select>
       </div>
 
-      {/* Action buttons */}
       {canEdit(session) && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <button className="btn btn-sm btn-primary" onClick={() => { setEditItem(null); setShowModal(true) }}>+ Add equipment</button>
@@ -339,7 +340,6 @@ function EquipmentList({ session }) {
         </div>
       )}
 
-      {/* Import preview */}
       {importPreview && (
         <div className="card" style={{ marginBottom: 16, borderColor: 'var(--accent)' }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Import preview — {importPreview.length} items</div>
@@ -353,11 +353,12 @@ function EquipmentList({ session }) {
         </div>
       )}
 
-      {/* Stats bar */}
       <div style={{ display: 'flex', gap: 16, padding: '10px 0', marginBottom: 12, fontSize: 13, color: 'var(--text2)', borderBottom: '1px solid var(--border)' }}>
         <span><strong style={{ color: 'var(--text)' }}>{filtered.length}</strong> items shown</span>
         <span><strong style={{ color: 'var(--text)' }}>{items.length}</strong> total</span>
-        {Object.keys(grouped).length > 0 && <span><strong style={{ color: 'var(--text)' }}>{Object.keys(grouped).length}</strong> categories</span>}
+        {items.filter(i => i.out_of_service).length > 0 && (
+          <span style={{ color: 'var(--accent2)' }}>⛔ <strong>{items.filter(i => i.out_of_service).length}</strong> out of service</span>
+        )}
       </div>
 
       {loading ? (
@@ -375,7 +376,8 @@ function EquipmentList({ session }) {
               <table style={{ fontSize: 13, minWidth: 700 }}>
                 <thead>
                   <tr>
-                    <th>Equipment</th>
+                    <th style={{ width: 36 }}>#</th>
+                    <th>Equipment Name</th>
                     <th>Nickname</th>
                     <th>Location</th>
                     <th>Manufacturer</th>
@@ -386,29 +388,38 @@ function EquipmentList({ session }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {catItems.map(item => (
-                    <tr key={item.id}>
-                      <td style={{ fontWeight: 500 }}>{item.equipment_name}</td>
-                      <td style={{ color: 'var(--text2)' }}>{item.nickname || '—'}</td>
-                      <td style={{ color: 'var(--text2)' }}>{item.location || '—'}</td>
-                      <td style={{ color: 'var(--text2)' }}>{item.manufacturer || '—'}</td>
-                      <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.serial_number || '—'}</td>
-                      <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.date_received || '—'}</td>
-                      <td>
-                        <span style={{ background: condBg[item.condition] || '#f0efe9', color: condColor[item.condition] || '#555', borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
-                          {item.condition || 'Good'}
-                        </span>
-                      </td>
-                      {canEdit(session) && (
-                        <td>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button className="btn btn-sm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => { setEditItem(item); setShowModal(true) }}>Edit</button>
-                            <button className="btn btn-sm btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => deleteItem(item.id)}>✕</button>
-                          </div>
+                  {catItems.map((item) => {
+                    rowNum++
+                    return (
+                      <tr key={item.id} style={{ opacity: item.out_of_service ? 0.6 : 1 }}>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text3)', textAlign: 'center' }}>{rowNum}</td>
+                        <td style={{ fontWeight: 500 }}>
+                          {item.out_of_service && (
+                            <span style={{ marginRight: 6, fontSize: 10, background: '#fcebeb', color: '#a32d2d', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>OUT OF SERVICE</span>
+                          )}
+                          {item.equipment_name}
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        <td style={{ color: 'var(--text2)' }}>{item.nickname || '—'}</td>
+                        <td style={{ color: 'var(--text2)' }}>{item.location || '—'}</td>
+                        <td style={{ color: 'var(--text2)' }}>{item.manufacturer || '—'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.serial_number || '—'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.date_received || '—'}</td>
+                        <td>
+                          <span style={{ background: condBg[item.condition] || '#f0efe9', color: condColor[item.condition] || '#555', borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
+                            {item.condition || 'Good'}
+                          </span>
+                        </td>
+                        {canEdit(session) && (
+                          <td>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button className="btn btn-sm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => { setEditItem(item); setShowModal(true) }}>Edit</button>
+                              <button className="btn btn-sm btn-danger" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => deleteItem(item.id)}>✕</button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -428,9 +439,6 @@ function EquipmentList({ session }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// TAB 2 — MAINTENANCE DUE
-// ══════════════════════════════════════════════════════════════
 function MaintenanceDue({ session }) {
   const { toast } = useAppStore()
   const [items, setItems] = useState([])
@@ -444,29 +452,17 @@ function MaintenanceDue({ session }) {
 
   async function load() {
     setLoading(true)
-    // Load equipment with maintenance schedules OR usage thresholds
     const [{ data: byDate }, { data: byUsage }, { data: bookings }] = await Promise.all([
       sb.from('equipment_inventory').select('*').eq('is_active', true).not('next_maintenance_date', 'is', null).order('next_maintenance_date'),
       sb.from('equipment_inventory').select('*').eq('is_active', true).not('max_usage_hours', 'is', null),
       sb.from('equipment_bookings').select('equipment_id, start_time, end_time').eq('status', 'confirmed'),
     ])
-    // For staff (non-admin), also load equipment assigned to them
-    if (!isAdmin(session)) {
-      const { data: assigned } = await sb.from('equipment_inventory').select('*').eq('is_active', true).eq('assigned_to', session.username)
-      if (assigned?.length) {
-        const assignedIds = new Set(assigned.map(a => a.id))
-        byDate?.push(...assigned.filter(a => !byDate?.find(b => b.id === a.id)))
-        byUsage?.push(...assigned.filter(a => !byUsage?.find(b => b.id === a.id)))
-      }
-    }
-    // Calculate usage hours per equipment
     const usageHrs = {}
     ;(bookings || []).forEach(b => {
       const hrs = (new Date(b.end_time) - new Date(b.start_time)) / 3600000
       usageHrs[b.equipment_id] = (usageHrs[b.equipment_id] || 0) + hrs
     })
     setUsageHours(usageHrs)
-    // Merge: items from both queries (deduplicated)
     const allIds = new Set()
     const merged = []
     for (const i of [...(byDate || []), ...(byUsage || [])]) {
@@ -483,7 +479,6 @@ function MaintenanceDue({ session }) {
 
   function getStatus(item) {
     const days = getDaysUntil(item.next_maintenance_date)
-    // Check usage-based threshold
     if (item.max_usage_hours) {
       const hrs = usageHours[item.id] || 0
       const pct = (hrs / item.max_usage_hours) * 100
@@ -516,7 +511,7 @@ function MaintenanceDue({ session }) {
   const upcoming = items.filter(i => { const d = getDaysUntil(i.next_maintenance_date); return d !== null && d > 30 && d <= 90 })
   const ok = items.filter(i => { const d = getDaysUntil(i.next_maintenance_date); return d !== null && d > 90 })
 
-  function Section({ title, color, bg, items: sItems }) {
+  function Section({ title, color, items: sItems }) {
     if (sItems.length === 0) return null
     return (
       <div style={{ marginBottom: 24 }}>
@@ -543,9 +538,7 @@ function MaintenanceDue({ session }) {
                   <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 3, fontFamily: 'var(--mono)' }}>Due: {item.next_maintenance_date}</div>
                 </div>
                 {canEdit(session) && (
-                  <button className="btn btn-sm btn-primary" onClick={() => { setLogModal(item); setLogDate(new Date().toISOString().split('T')[0]); setLogNotes('') }}>
-                    ✓ Log
-                  </button>
+                  <button className="btn btn-sm btn-primary" onClick={() => { setLogModal(item); setLogDate(new Date().toISOString().split('T')[0]); setLogNotes('') }}>✓ Log</button>
                 )}
               </div>
             </div>
@@ -560,21 +553,16 @@ function MaintenanceDue({ session }) {
       {loading ? (
         <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
       ) : items.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">🔧</div>
-          <div>No maintenance schedules set up.</div>
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginTop: 8 }}>Add maintenance intervals in the Equipment List tab.</div>
-        </div>
+        <div className="empty-state"><div className="empty-icon">🔧</div><div>No maintenance schedules set up.</div></div>
       ) : (
         <>
-          <Section title="Overdue" color="#a32d2d" bg="#fcebeb" items={overdue} />
-          <Section title="Due within 30 days" color="#92400e" bg="#fef3c7" items={soon} />
-          <Section title="Due in 31–90 days" color="#0369a1" bg="#e0f2fe" items={upcoming} />
-          <Section title="Up to date" color="#1e4d39" bg="#e8f2ee" items={ok} />
+          <Section title="Overdue" color="#a32d2d" items={overdue} />
+          <Section title="Due within 30 days" color="#92400e" items={soon} />
+          <Section title="Due in 31–90 days" color="#0369a1" items={upcoming} />
+          <Section title="Up to date" color="#1e4d39" items={ok} />
         </>
       )}
 
-      {/* Log maintenance modal */}
       {logModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 28, maxWidth: 420, width: '100%', border: '1px solid var(--border)' }}>
@@ -584,7 +572,7 @@ function MaintenanceDue({ session }) {
             <div className="field"><label>Notes (optional)</label><textarea rows={3} value={logNotes} onChange={e => setLogNotes(e.target.value)} placeholder="What was done?" style={{ resize: 'vertical' }} /></div>
             {logModal.maintenance_interval_days && (
               <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 16 }}>
-                Next maintenance will be set to {new Date(new Date(logDate).getTime() + logModal.maintenance_interval_days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                Next maintenance: {new Date(new Date(logDate).getTime() + logModal.maintenance_interval_days * 86400000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </div>
             )}
             <div style={{ display: 'flex', gap: 10 }}>
@@ -598,35 +586,26 @@ function MaintenanceDue({ session }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// TAB 3 — SETTINGS
-// ══════════════════════════════════════════════════════════════
 function CategoriesManager({ toast }) {
   const [categories, setCategories] = useState([])
   const [newCat, setNewCat] = useState('')
   const [loading, setLoading] = useState(true)
-
   useEffect(() => { loadCats() }, [])
-
   async function loadCats() {
     setLoading(true)
     const { data } = await sb.from('equipment_categories').select('*').order('name')
-    setCategories(data || [])
-    setLoading(false)
+    setCategories(data || []); setLoading(false)
   }
-
   async function addCategory() {
     if (!newCat.trim()) return
     await sb.from('equipment_categories').insert({ name: newCat.trim() })
     setNewCat(''); loadCats(); toast('Category added.')
   }
-
   async function deleteCategory(id) {
-    if (!confirm('Delete this category? Equipment using it will become uncategorized.')) return
+    if (!confirm('Delete this category?')) return
     await sb.from('equipment_categories').delete().eq('id', id)
     loadCats(); toast('Category deleted.')
   }
-
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Categories</div>
@@ -652,29 +631,22 @@ function EquipmentSettings({ session }) {
   const { toast } = useAppStore()
   const [defaultInterval, setDefaultInterval] = useState('365')
   const [saving, setSaving] = useState(false)
-
   async function applyDefaultInterval() {
-    if (!confirm(`Set maintenance interval to ${defaultInterval} days for all equipment that don't have one yet?`)) return
+    if (!confirm(`Set maintenance interval to ${defaultInterval} days for all equipment without one?`)) return
     setSaving(true)
-    await sb.from('equipment_inventory')
-      .update({ maintenance_interval_days: parseInt(defaultInterval) })
-      .is('maintenance_interval_days', null)
-      .eq('is_active', true)
-    toast('Default interval applied.')
-    setSaving(false)
+    await sb.from('equipment_inventory').update({ maintenance_interval_days: parseInt(defaultInterval) }).is('maintenance_interval_days', null).eq('is_active', true)
+    toast('Default interval applied.'); setSaving(false)
   }
-
   async function clearAllMaintenance() {
     if (!confirm('Clear all maintenance schedules? This cannot be undone.')) return
     await sb.from('equipment_inventory').update({ maintenance_interval_days: null, last_maintenance_date: null, next_maintenance_date: null }).eq('is_active', true)
     toast('Maintenance schedules cleared.')
   }
-
   return (
     <div>
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Default maintenance interval</div>
-        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Apply a default interval to all equipment that don't have one set.</div>
+        <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Apply a default interval to all equipment without one set.</div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <select value={defaultInterval} onChange={e => setDefaultInterval(e.target.value)} style={{ width: 'auto' }}>
             <option value="90">Every 90 days</option>
@@ -685,9 +657,7 @@ function EquipmentSettings({ session }) {
           <button className="btn btn-sm btn-primary" onClick={applyDefaultInterval} disabled={saving}>Apply to equipment without interval</button>
         </div>
       </div>
-
       <CategoriesManager toast={toast} />
-
       {session?.role === 'admin' && (
         <div className="card" style={{ borderColor: 'var(--accent2)' }}>
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4, color: 'var(--accent2)' }}>Danger zone</div>
@@ -699,69 +669,50 @@ function EquipmentSettings({ session }) {
   )
 }
 
-
-// ══════════════════════════════════════════════════════════════
-// TAB — MAINTENANCE RECORDS (admin/staff only)
-// ══════════════════════════════════════════════════════════════
 function MaintenanceRecords({ session }) {
   const { toast } = useAppStore()
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
-  const [usageMap, setUsageMap] = useState({}) // equipment_id → total hours from bookings
-  const [editHours, setEditHours] = useState(null) // { id, max_usage_hours, usage_hours_since_maintenance }
+  const [usageMap, setUsageMap] = useState({})
+  const [editHours, setEditHours] = useState(null)
   const [saving, setSaving] = useState(false)
   const [staff, setStaff] = useState([])
-  const [assignModal, setAssignModal] = useState(null) // { id, name, assigned_to }
+  const [assignModal, setAssignModal] = useState(null)
 
   useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
     const [{ data: eq }, { data: bookings }, { data: staffData }] = await Promise.all([
-      sb.from('equipment_inventory').select('id, equipment_name, nickname, location, category, last_maintenance_date, max_usage_hours, usage_hours_since_maintenance, condition, assigned_to').eq('is_active', true).order('category').order('equipment_name'),
+      sb.from('equipment_inventory').select('id, equipment_name, nickname, location, category, last_maintenance_date, max_usage_hours, usage_hours_since_maintenance, condition, assigned_to, out_of_service').eq('is_active', true).order('category').order('equipment_name'),
       sb.from('equipment_bookings').select('equipment_id, start_time, end_time, status').eq('status', 'confirmed'),
       sb.from('users').select('id, name').in('role', ['user', 'admin']).eq('is_active', true).order('name'),
     ])
     setStaff(staffData || [])
-
-    // Calculate total usage hours per equipment from bookings
     const usage = {}
     ;(bookings || []).forEach(b => {
       const hrs = (new Date(b.end_time) - new Date(b.start_time)) / 3600000
       usage[b.equipment_id] = (usage[b.equipment_id] || 0) + hrs
     })
-
-    setItems(eq || [])
-    setUsageMap(usage)
-    setLoading(false)
+    setItems(eq || []); setUsageMap(usage); setLoading(false)
   }
 
   async function assignMaintenance() {
     if (!assignModal) return
     setSaving(true)
     await sb.from('equipment_inventory').update({ assigned_to: assignModal.assigned_to || null, updated_at: new Date().toISOString() }).eq('id', assignModal.id)
-    toast('Maintenance assigned ✓')
-    setSaving(false)
-    setAssignModal(null)
-    load()
+    toast('Maintenance assigned ✓'); setSaving(false); setAssignModal(null); load()
   }
 
   async function saveMaxHours() {
     if (!editHours) return
     setSaving(true)
-    await sb.from('equipment_inventory').update({
-      max_usage_hours: editHours.max_usage_hours || null,
-      usage_hours_since_maintenance: editHours.usage_hours_since_maintenance || 0,
-      updated_at: new Date().toISOString(),
-    }).eq('id', editHours.id)
-    toast('Usage threshold saved ✓')
-    setSaving(false)
-    setEditHours(null)
-    load()
+    await sb.from('equipment_inventory').update({ max_usage_hours: editHours.max_usage_hours || null, usage_hours_since_maintenance: editHours.usage_hours_since_maintenance || 0, updated_at: new Date().toISOString() }).eq('id', editHours.id)
+    toast('Usage threshold saved ✓'); setSaving(false); setEditHours(null); load()
   }
 
   async function resetUsage(id) {
-    if (!confirm('Reset usage hours to 0 for this equipment? (Do this after performing maintenance)')) return
+    if (!confirm('Reset usage hours to 0?')) return
     await sb.from('equipment_inventory').update({ usage_hours_since_maintenance: 0, last_maintenance_date: new Date().toISOString().split('T')[0], updated_at: new Date().toISOString() }).eq('id', id)
     toast('Usage reset ✓'); load()
   }
@@ -775,51 +726,14 @@ function MaintenanceRecords({ session }) {
     return { label: `${Math.round(pct)}%`, color: '#1e4d39', bg: '#e8f2ee', pct }
   }
 
-  // Group by category
   const grouped = {}
-  items.forEach(i => {
-    const cat = i.category || 'Uncategorized'
-    if (!grouped[cat]) grouped[cat] = []
-    grouped[cat].push(i)
-  })
+  items.forEach(i => { const cat = i.category || 'Uncategorized'; if (!grouped[cat]) grouped[cat] = []; grouped[cat].push(i) })
 
   return (
     <div>
-      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>
-        Tracks equipment usage hours based on confirmed bookings. Admin can set a maximum usage threshold — when exceeded, the equipment appears in the Maintenance Due tab.
-      </div>
-
-      {/* Summary cards */}
-      {(() => {
-        const overLimit = items.filter(i => {
-          const hrs = usageMap[i.id] || 0
-          return i.max_usage_hours && hrs >= i.max_usage_hours
-        })
-        const nearLimit = items.filter(i => {
-          const hrs = usageMap[i.id] || 0
-          const pct = i.max_usage_hours ? (hrs / i.max_usage_hours) * 100 : 0
-          return pct >= 80 && pct < 100
-        })
-        return overLimit.length + nearLimit.length > 0 ? (
-          <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-            {overLimit.length > 0 && (
-              <div style={{ background: '#fcebeb', border: '1px solid #f09595', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: '#a32d2d' }}>
-                ⚠️ <strong>{overLimit.length}</strong> equipment exceeded max usage hours
-              </div>
-            )}
-            {nearLimit.length > 0 && (
-              <div style={{ background: '#fef3c7', border: '1px solid #f0d070', borderRadius: 8, padding: '10px 16px', fontSize: 13, color: '#92400e' }}>
-                🔔 <strong>{nearLimit.length}</strong> equipment approaching limit (≥80%)
-              </div>
-            )}
-          </div>
-        ) : null
-      })()}
-
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-      ) : (
-        Object.entries(grouped).map(([cat, catItems]) => (
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>Tracks equipment usage hours based on confirmed bookings. Set a maximum usage threshold — when exceeded, equipment appears in Maintenance Due.</div>
+      {loading ? <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+        : Object.entries(grouped).map(([cat, catItems]) => (
           <div key={cat} style={{ marginBottom: 28 }}>
             <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '6px 0', borderBottom: '1px solid var(--border)', marginBottom: 10, display: 'flex', justifyContent: 'space-between' }}>
               <span>{cat}</span><span style={{ fontWeight: 400 }}>{catItems.length} items</span>
@@ -828,14 +742,7 @@ function MaintenanceRecords({ session }) {
               <table style={{ fontSize: 13 }}>
                 <thead>
                   <tr>
-                    <th>Equipment</th>
-                    <th>Location</th>
-                    <th>Total Usage (hrs)</th>
-                    <th>Since Last Maint.</th>
-                    <th>Max Threshold</th>
-                    <th>Usage Bar</th>
-                    <th>Assigned To</th>
-                    <th>Last Maintenance</th>
+                    <th>Equipment</th><th>Location</th><th>Total Usage</th><th>Since Last</th><th>Max Threshold</th><th>Usage Bar</th><th>Assigned To</th><th>Last Maint.</th>
                     {canEdit(session) && <th>Actions</th>}
                   </tr>
                 </thead>
@@ -846,46 +753,32 @@ function MaintenanceRecords({ session }) {
                     const status = getUsageStatus(item, totalHrs)
                     return (
                       <tr key={item.id}>
-                        <td style={{ fontWeight: 500 }}>{item.nickname || item.equipment_name}</td>
+                        <td style={{ fontWeight: 500 }}>
+                          {item.out_of_service && <span style={{ marginRight: 4, fontSize: 10, background: '#fcebeb', color: '#a32d2d', borderRadius: 3, padding: '1px 4px', fontWeight: 700 }}>OOS</span>}
+                          {item.nickname || item.equipment_name}
+                        </td>
                         <td style={{ color: 'var(--text2)' }}>{item.location || '—'}</td>
                         <td style={{ fontFamily: 'var(--mono)', fontWeight: 600, color: 'var(--accent)' }}>{totalHrs}h</td>
                         <td style={{ fontFamily: 'var(--mono)' }}>{sinceHrs}h</td>
-                        <td style={{ fontFamily: 'var(--mono)' }}>
-                          {item.max_usage_hours ? `${item.max_usage_hours}h` : <span style={{ color: 'var(--text3)' }}>—</span>}
-                        </td>
+                        <td style={{ fontFamily: 'var(--mono)' }}>{item.max_usage_hours ? `${item.max_usage_hours}h` : <span style={{ color: 'var(--text3)' }}>—</span>}</td>
                         <td style={{ minWidth: 120 }}>
                           {status ? (
                             <div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                                <span style={{ fontSize: 11, color: status.color, fontWeight: 600 }}>{status.label}</span>
-                              </div>
-                              <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.min(100, status.pct)}%`, background: status.color, borderRadius: 99, transition: 'width 0.3s' }} />
+                              <span style={{ fontSize: 11, color: status.color, fontWeight: 600 }}>{status.label}</span>
+                              <div style={{ height: 6, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginTop: 3 }}>
+                                <div style={{ height: '100%', width: `${Math.min(100, status.pct)}%`, background: status.color, borderRadius: 99 }} />
                               </div>
                             </div>
-                          ) : <span style={{ color: 'var(--text3)', fontSize: 12 }}>No threshold set</span>}
+                          ) : <span style={{ color: 'var(--text3)', fontSize: 12 }}>No threshold</span>}
                         </td>
-                        <td>
-                          {item.assigned_to
-                            ? <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{item.assigned_to}</span>
-                            : <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>}
-                        </td>
+                        <td>{item.assigned_to ? <span style={{ background: 'var(--accent-light)', color: 'var(--accent)', borderRadius: 99, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{item.assigned_to}</span> : <span style={{ color: 'var(--text3)', fontSize: 12 }}>—</span>}</td>
                         <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{item.last_maintenance_date || '—'}</td>
                         {canEdit(session) && (
                           <td>
                             <div style={{ display: 'flex', gap: 6 }}>
-                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
-                                onClick={() => setEditHours({ id: item.id, name: item.nickname || item.equipment_name, max_usage_hours: item.max_usage_hours || '', usage_hours_since_maintenance: item.usage_hours_since_maintenance || 0 })}>
-                                ⚙️ Set
-                              </button>
-                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
-                                onClick={() => setAssignModal({ id: item.id, name: item.nickname || item.equipment_name, assigned_to: item.assigned_to || '' })}>
-                                👤 Assign
-                              </button>
-                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }}
-                                onClick={() => resetUsage(item.id)}>
-                                ↺ Reset
-                              </button>
+                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => setEditHours({ id: item.id, name: item.nickname || item.equipment_name, max_usage_hours: item.max_usage_hours || '', usage_hours_since_maintenance: item.usage_hours_since_maintenance || 0 })}>⚙️ Set</button>
+                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => setAssignModal({ id: item.id, name: item.nickname || item.equipment_name, assigned_to: item.assigned_to || '' })}>👤</button>
+                              <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => resetUsage(item.id)}>↺</button>
                             </div>
                           </td>
                         )}
@@ -897,9 +790,8 @@ function MaintenanceRecords({ session }) {
             </div>
           </div>
         ))
-      )}
+      }
 
-      {/* Assign maintenance modal */}
       {assignModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 28, maxWidth: 380, width: '100%', border: '1px solid var(--border)' }}>
@@ -911,7 +803,6 @@ function MaintenanceRecords({ session }) {
                 <option value="">— Unassigned —</option>
                 {staff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
               </select>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>The assigned staff member will see this equipment in their Maintenance Due tab.</div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-primary" onClick={assignMaintenance} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
@@ -921,7 +812,6 @@ function MaintenanceRecords({ session }) {
         </div>
       )}
 
-      {/* Edit threshold modal */}
       {editHours && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 'var(--radius-lg)', padding: 28, maxWidth: 400, width: '100%', border: '1px solid var(--border)' }}>
@@ -933,7 +823,6 @@ function MaintenanceRecords({ session }) {
                 <input type="number" value={editHours.max_usage_hours} onChange={e => setEditHours(f => ({ ...f, max_usage_hours: e.target.value }))} placeholder="e.g. 100" style={{ width: 120 }} />
                 <span style={{ fontSize: 13, color: 'var(--text3)' }}>hours</span>
               </div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 6 }}>When total booking hours reach this limit, equipment will appear in Maintenance Due tab.</div>
             </div>
             <div className="field">
               <label>Current hours since last maintenance</label>
@@ -953,9 +842,6 @@ function MaintenanceRecords({ session }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ══════════════════════════════════════════════════════════════
 export default function EquipmentInventory() {
   const { session } = useAppStore()
   const [tab, setTab] = useState('list')
@@ -973,8 +859,6 @@ export default function EquipmentInventory() {
         <div className="section-title">Equipment Inventory</div>
         <HelpPanel screen="equipment" />
       </div>
-
-      {/* Tabs */}
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
@@ -983,7 +867,6 @@ export default function EquipmentInventory() {
           </button>
         ))}
       </div>
-
       {tab === 'list' && <EquipmentList session={session} />}
       {tab === 'maintenance' && <MaintenanceDue session={session} />}
       {tab === 'records' && <MaintenanceRecords session={session} />}
