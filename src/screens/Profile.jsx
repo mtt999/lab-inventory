@@ -483,20 +483,24 @@ function UserProfile({ session }) {
       u = data
     }
     setUser(u)
-    if (u) setForm({ name: u.name||'', last_name: u.last_name||'', email: u.email||'', phone: u.phone||'', degree: u.degree||'', year_semester: u.year_semester||'', supervisor: u.supervisor||'', project_group: u.project_group||'', avatar: u.avatar||'', photo_url: u.photo_url||'' })
+    if (u) setForm({
+      name: u.name||'', last_name: u.last_name||'', email: u.email||'', phone: u.phone||'',
+      degree: u.degree||'', year_semester: u.year_semester||'', supervisor: u.supervisor||'',
+      project_group: u.project_group||'', photo_url: u.photo_url||''
+    })
     setLoading(false)
   }
 
   async function saveInfo() {
     setSaving(true)
     const { error } = await sb.from('users').update({
-      name: form.name.trim(), last_name: form.last_name||null, email: form.email||null, phone: form.phone||null,
-      degree: form.degree||null, year_semester: form.year_semester||null, supervisor: form.supervisor||null,
-      project_group: form.project_group||null, avatar: form.avatar||null, photo_url: form.photo_url||null
+      name: form.name.trim(), last_name: form.last_name||null, email: form.email||null,
+      phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null,
+      supervisor: form.supervisor||null, project_group: form.project_group||null,
+      photo_url: form.photo_url||null
     }).eq('id', user.id)
-    if (error) { toast('Error saving.'); setSaving(false); return }
-    // Update session so header reflects name/avatar changes immediately
-    setSession({ ...session, username: form.name.trim(), photoUrl: form.photo_url||null, avatar: form.avatar||null })
+    if (error) { toast('Error saving: ' + error.message); setSaving(false); return }
+    setSession({ ...session, username: form.name.trim(), photoUrl: form.photo_url||null })
     toast('Profile saved ✓'); setSaving(false); load()
   }
 
@@ -511,7 +515,7 @@ function UserProfile({ session }) {
     toast('Password updated ✓'); setPinForm({ current: '', newPin: '', confirm: '' })
   }
 
-  // FIX: auto-save photo to DB immediately after upload, update header avatar
+  // Auto-saves photo to DB immediately — no separate Save needed
   async function uploadPhoto(file) {
     if (!file?.type.startsWith('image/')) { toast('Please select an image.'); return }
     setUploading(true)
@@ -531,13 +535,13 @@ function UserProfile({ session }) {
       const { error: uploadErr } = await sb.storage.from('project-files').upload(path, compressed, { contentType: 'image/jpeg', upsert: true })
       if (uploadErr) throw uploadErr
       const photoUrl = sb.storage.from('project-files').getPublicUrl(path).data.publicUrl
-      // Save to DB immediately — no extra "Save" click needed
-      const { error: saveErr } = await sb.from('users').update({ photo_url: photoUrl, avatar: null }).eq('id', user.id)
+      // Save photo_url to DB immediately (only photo_url — no avatar column)
+      const { error: saveErr } = await sb.from('users').update({ photo_url: photoUrl }).eq('id', user.id)
       if (saveErr) throw saveErr
-      // Update form, local user object, AND session (so header avatar updates right away)
-      setForm(f => ({ ...f, photo_url: photoUrl, avatar: '' }))
-      setUser(u => ({ ...u, photo_url: photoUrl, avatar: null }))
-      setSession({ ...session, photoUrl: photoUrl, avatar: null })
+      // Update all state immediately
+      setForm(f => ({ ...f, photo_url: photoUrl }))
+      setUser(u => ({ ...u, photo_url: photoUrl }))
+      setSession({ ...session, photoUrl: photoUrl })
       toast('Photo saved ✓')
     } catch (err) { toast('Upload failed: ' + (err?.message || String(err))) }
     setUploading(false)
@@ -547,12 +551,9 @@ function UserProfile({ session }) {
   if (!user) return <div className="empty-state"><div className="empty-icon">👤</div>Profile not found.</div>
 
   const displayName = [user.name, user.last_name].filter(Boolean).join(' ')
-  // Use form.photo_url so the preview card updates immediately after upload
   const previewPhoto = form.photo_url || user.photo_url
-  const previewAvatar = form.avatar || user.avatar
   const avatarContent = previewPhoto
     ? <img src={previewPhoto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-    : previewAvatar ? <span style={{ fontSize: 36 }}>{previewAvatar}</span>
     : <span style={{ fontSize: 32, color: 'var(--text3)' }}>👤</span>
 
   return (
@@ -630,33 +631,34 @@ function UserProfile({ session }) {
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, padding: '12px 16px', background: 'var(--surface2)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-              {form.photo_url ? <img src={form.photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 32 }}>{form.avatar || '👤'}</span>}
+              {form.photo_url
+                ? <img src={form.photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <span style={{ fontSize: 32, color: 'var(--text3)' }}>👤</span>
+              }
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>Current photo / avatar</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Photo is saved automatically on upload. Use Save for emoji selection.</div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Current photo</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Photo saves automatically after upload.</div>
             </div>
-            {(form.photo_url || form.avatar) && (
+            {form.photo_url && (
               <button className="btn btn-sm" onClick={async () => {
-                await sb.from('users').update({ photo_url: null, avatar: null }).eq('id', user.id)
-                setForm(f => ({ ...f, photo_url: '', avatar: '' }))
-                setUser(u => ({ ...u, photo_url: null, avatar: null }))
-                setSession({ ...session, photoUrl: null, avatar: null })
+                const { error } = await sb.from('users').update({ photo_url: null }).eq('id', user.id)
+                if (error) { toast('Error: ' + error.message); return }
+                setForm(f => ({ ...f, photo_url: '' }))
+                setUser(u => ({ ...u, photo_url: null }))
+                setSession({ ...session, photoUrl: null })
                 toast('Photo removed.')
               }}>Remove</button>
             )}
           </div>
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>Upload a photo</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Photo saves automatically after upload — no need to click Save.</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Saves automatically — no need to click Save.</div>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhoto(e.target.files[0])} />
-            <button className="btn btn-sm btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? '⏳ Uploading & saving…' : '⬆️ Choose photo'}</button>
+            <button className="btn btn-sm btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>
+              {uploading ? '⏳ Uploading & saving…' : '⬆️ Choose photo'}
+            </button>
           </div>
-          <div style={{ borderTop: '1px solid var(--border)', margin: '0 0 20px', position: 'relative' }}>
-            <span style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', background: 'var(--surface)', padding: '0 12px', fontSize: 12, color: 'var(--text3)' }}>or pick an emoji</span>
-          </div>
-          <AvatarPicker selected={form.avatar} onSelect={a => setForm(f => ({ ...f, avatar: a, photo_url: '' }))} />
-          <div style={{ marginTop: 20 }}><button className="btn btn-primary" onClick={saveInfo} disabled={saving}>{saving ? 'Saving…' : 'Save emoji selection'}</button></div>
         </div>
       )}
 
