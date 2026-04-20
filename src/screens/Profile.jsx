@@ -127,7 +127,7 @@ function StudentsPanel({ toast }) {
       degree: form.degree || null, year_semester: form.year_semester || null,
       supervisor: form.supervisor || null, project_group: form.project_group || null,
       role: 'student', is_active: true, admin_level: 0,
-      pin: '',  // required NOT NULL column
+      pin: '',
     }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
     if (id) {
@@ -215,11 +215,15 @@ function StudentsPanel({ toast }) {
           <div key={s.id} className="card" style={{ padding: '12px 18px', marginBottom: 10, opacity: s.is_active ? 1 : 0.5 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div>
+                {/* First name (stored in last_name) bold, last name (stored in name) smaller below */}
                 <div style={{ fontWeight: 600 }}>
                   <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginRight: 6 }}>#{idx+1}</span>
-                  {s.name}
+                  {s.last_name || s.name}
                   {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}
                 </div>
+                {s.last_name && (
+                  <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 1, marginLeft: 22 }}>{s.name}</div>
+                )}
                 <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
                   {s.email && <span>📧 {s.email}</span>}
                   {s.password && <span>🔑 {s.password}</span>}
@@ -331,7 +335,7 @@ function StaffListPanel({ toast }) {
     const payload = {
       name: form.name.trim(), email: form.email || null, phone: form.phone || null,
       role, is_active: true, admin_level: Math.max(0, adminLv),
-      pin: '',  // required NOT NULL column
+      pin: '',
     }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
     if (id) {
