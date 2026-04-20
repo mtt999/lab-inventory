@@ -12,6 +12,16 @@ const AVATARS = ['🧪', '🔬', '📐', '🏗️', '⚗️', '🧬', '🔭', '�
 const groupColor = { Material: '#92400e', Sustainability: '#1e4d39', GPR: '#0369a1', Mechanic: '#7c4dbd', Other: '#6b6860' }
 const groupBg   = { Material: '#fef3c7', Sustainability: '#e8f2ee', GPR: '#e0f2fe', Mechanic: '#f3eeff', Other: '#f0efe9' }
 
+// ── Column mapping for students (data imported with wrong column headers) ──
+// DB column 'name'   → stores Last Name
+// DB column 'email'  → stores First Name
+// DB column 'phone'  → stores Email address
+// DB column 'degree' → stores Supervisor name
+const sFirstName = s => s?.email || ''
+const sLastName  = s => s?.name  || ''
+const sEmail     = s => s?.phone || ''
+const sSupervisor = s => s?.degree || s?.supervisor || ''
+
 function AvatarPicker({ selected, onSelect }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
@@ -103,9 +113,8 @@ function StudentsPanel({ toast }) {
   const [importPreview, setImportPreview] = useState(null)
   const [importing, setImporting] = useState(false)
   const fileRef = useRef(null)
-  const [supervisors, setSupervisors] = useState([])
 
-  useEffect(() => { load(); loadSupervisors() }, [])
+  useEffect(() => { load() }, [])
 
   async function load() {
     setLoading(true)
@@ -114,18 +123,17 @@ function StudentsPanel({ toast }) {
     setLoading(false)
   }
 
-  async function loadSupervisors() {
-    const { data } = await sb.from('users').select('id, name').in('role', ['user', 'admin']).eq('is_active', true).order('name')
-    setSupervisors(data || [])
-  }
-
   async function saveStudent(form, id) {
-    if (!form.name.trim()) { toast('Name is required.'); return }
+    // form.firstName → email col, form.lastName → name col, form.emailAddr → phone col, form.supervisor → degree col
+    if (!form.firstName.trim() && !form.lastName.trim()) { toast('Name is required.'); return }
     if (!id && !form.password) { toast('Password is required.'); return }
     const payload = {
-      name: form.name.trim(), email: form.email || null, phone: form.phone || null,
-      degree: form.degree || null, year_semester: form.year_semester || null,
-      supervisor: form.supervisor || null, project_group: form.project_group || null,
+      name: form.lastName.trim(),           // last name stored in 'name'
+      email: form.firstName.trim() || null, // first name stored in 'email'
+      phone: form.emailAddr || null,        // email address stored in 'phone'
+      degree: form.supervisor || null,      // supervisor stored in 'degree'
+      year_semester: form.year_semester || null,
+      project_group: form.project_group || null,
       role: 'student', is_active: true, admin_level: 0,
       pin: '',
     }
@@ -215,19 +223,18 @@ function StudentsPanel({ toast }) {
           <div key={s.id} className="card" style={{ padding: '12px 18px', marginBottom: 10, opacity: s.is_active ? 1 : 0.5 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div>
-                {/* First name (stored in last_name) bold, last name (stored in name) smaller below */}
+                {/* First name (email col) bold, Last name (name col) smaller below */}
                 <div style={{ fontWeight: 600 }}>
                   <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginRight: 6 }}>#{idx+1}</span>
-                  {s.last_name || s.name}
+                  {sFirstName(s)}
                   {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}
                 </div>
-                {s.last_name && (
-                  <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 1, marginLeft: 22 }}>{s.name}</div>
+                {sLastName(s) && (
+                  <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 1, marginLeft: 22 }}>{sLastName(s)}</div>
                 )}
-                <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
-                  {s.email && <span>📧 {s.email}</span>}
+                <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 3 }}>
+                  {sEmail(s) && <span>📧 {sEmail(s)}</span>}
                   {s.password && <span>🔑 {s.password}</span>}
-                  {s.degree && <span>{s.degree}</span>}
                   {s.project_group && <span>{s.project_group}</span>}
                 </div>
               </div>
@@ -240,51 +247,72 @@ function StudentsPanel({ toast }) {
           </div>
         ))
       }
-      {showModal && <StudentModal student={editStudent} supervisors={supervisors} onClose={() => { setShowModal(false); setEditStudent(null) }} onSave={saveStudent} />}
+      {showModal && <StudentModal student={editStudent} onClose={() => { setShowModal(false); setEditStudent(null) }} onSave={saveStudent} />}
     </div>
   )
 }
 
-function StudentModal({ student, onClose, onSave, supervisors = [] }) {
+function StudentModal({ student, onClose, onSave }) {
   const [form, setForm] = useState(student ? {
-    name: student.name||'', password: '', email: student.email||'', phone: student.phone||'',
-    degree: student.degree||'', year_semester: student.year_semester||'', supervisor: student.supervisor||'', project_group: student.project_group||'',
-  } : { name: '', password: '', email: '', phone: '', degree: '', year_semester: '', supervisor: '', project_group: '' })
+    firstName: sFirstName(student),   // email col
+    lastName:  sLastName(student),    // name col
+    emailAddr: sEmail(student),       // phone col
+    supervisor: sSupervisor(student), // degree col
+    password: '',
+    year_semester: student.year_semester||'',
+    project_group: student.project_group||'',
+  } : {
+    firstName: '', lastName: '', emailAddr: '', supervisor: '',
+    password: '', year_semester: '', project_group: ''
+  })
+
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:520, width:'100%', maxHeight:'90vh', overflowY:'auto', border:'1px solid var(--border)' }}>
         <div style={{ fontWeight:600, fontSize:16, marginBottom:20 }}>{student ? 'Edit student' : 'Add student'}</div>
+
+        {/* Name row */}
         <div className="grid-2">
-          <div className="field"><label>Full Name *</label><input value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} autoFocus /></div>
-          <div className="field"><label>Email</label><input type="email" value={form.email} onChange={e=>setForm(f=>({...f,email:e.target.value}))} placeholder="netid@illinois.edu" /></div>
+          <div className="field">
+            <label>First Name *</label>
+            <input value={form.firstName} onChange={e=>setForm(f=>({...f,firstName:e.target.value}))} placeholder="e.g. Ivan" autoFocus />
+          </div>
+          <div className="field">
+            <label>Last Name *</label>
+            <input value={form.lastName} onChange={e=>setForm(f=>({...f,lastName:e.target.value}))} placeholder="e.g. Akonya" />
+          </div>
+        </div>
+
+        {/* Email + Password */}
+        <div className="field">
+          <label>Email Address</label>
+          <input type="email" value={form.emailAddr} onChange={e=>setForm(f=>({...f,emailAddr:e.target.value}))} placeholder="netid@illinois.edu" />
         </div>
         <div className="field">
           <label>Password{student ? ' (leave blank to keep current)' : ' *'}</label>
           <input type="text" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder={student ? 'Type new password to change' : 'Min. 6 chars'} />
           {student && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Current: {student.password || '—'} · Leave blank to keep unchanged</div>}
         </div>
+
+        {/* Supervisor + Project Group */}
         <div className="grid-2">
-          <div className="field"><label>Phone</label><input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} /></div>
-          <div className="field"><label>Degree</label>
-            <select value={form.degree} onChange={e=>setForm(f=>({...f,degree:e.target.value}))}>
-              <option value="">— Select —</option>{DEGREES.map(d=><option key={d} value={d}>{d}</option>)}
-            </select>
+          <div className="field">
+            <label>Supervisor</label>
+            <input value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} placeholder="e.g. Prof. Imad Al-Qadi" />
           </div>
-        </div>
-        <div className="grid-2">
-          <div className="field"><label>Year & Semester</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
           <div className="field"><label>Project Group</label>
             <select value={form.project_group} onChange={e=>setForm(f=>({...f,project_group:e.target.value}))}>
               <option value="">— Select —</option>{PROJECT_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
             </select>
           </div>
         </div>
-        <div className="field"><label>Supervisor</label>
-          <select value={form.supervisor||''} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))}>
-            <option value="">— Select supervisor —</option>
-            {supervisors.map(s=><option key={s.id} value={s.name}>{s.name}</option>)}
-          </select>
+
+        {/* Year Semester */}
+        <div className="field">
+          <label>Year & Semester</label>
+          <input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" />
         </div>
+
         <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <button className="btn btn-primary" onClick={()=>onSave(form, student?.id)}>Save</button>
           <button className="btn" onClick={onClose}>Cancel</button>
