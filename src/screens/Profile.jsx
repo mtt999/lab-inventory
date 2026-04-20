@@ -127,6 +127,7 @@ function StudentsPanel({ toast }) {
       degree: form.degree || null, year_semester: form.year_semester || null,
       supervisor: form.supervisor || null, project_group: form.project_group || null,
       role: 'student', is_active: true, admin_level: 0,
+      pin: '',  // required NOT NULL column
     }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
     if (id) {
@@ -178,7 +179,7 @@ function StudentsPanel({ toast }) {
     let added = 0
     for (const s of importPreview) {
       const pw = Math.random().toString(36).slice(2, 8)
-      const { error } = await sb.from('users').insert({ ...s, password: pw, role: 'student', is_active: true, admin_level: 0 })
+      const { error } = await sb.from('users').insert({ ...s, password: pw, pin: '', role: 'student', is_active: true, admin_level: 0 })
       if (!error) added++
     }
     setImportPreview(null); setImporting(false); load()
@@ -327,7 +328,11 @@ function StaffListPanel({ toast }) {
     if (!id && !form.password) { toast('Password is required.'); return }
     const adminLv = parseInt(form.admin_level) || 0
     const role = adminLv >= 1 ? 'admin' : 'user'
-    const payload = { name: form.name.trim(), email: form.email || null, phone: form.phone || null, role, is_active: true, admin_level: Math.max(0, adminLv) }
+    const payload = {
+      name: form.name.trim(), email: form.email || null, phone: form.phone || null,
+      role, is_active: true, admin_level: Math.max(0, adminLv),
+      pin: '',  // required NOT NULL column
+    }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
     if (id) {
       const { error } = await sb.from('users').update(payload).eq('id', id)
@@ -454,9 +459,6 @@ function SupervisorSelect({ value, onChange }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// STAFF / STUDENT PROFILE PAGE
-// ══════════════════════════════════════════════════════════════
 function UserProfile({ session }) {
   const { toast, setSession } = useAppStore()
   const [user, setUser] = useState(null)
@@ -515,7 +517,6 @@ function UserProfile({ session }) {
     toast('Password updated ✓'); setPinForm({ current: '', newPin: '', confirm: '' })
   }
 
-  // Auto-saves photo to DB immediately — no separate Save needed
   async function uploadPhoto(file) {
     if (!file?.type.startsWith('image/')) { toast('Please select an image.'); return }
     setUploading(true)
@@ -535,10 +536,8 @@ function UserProfile({ session }) {
       const { error: uploadErr } = await sb.storage.from('project-files').upload(path, compressed, { contentType: 'image/jpeg', upsert: true })
       if (uploadErr) throw uploadErr
       const photoUrl = sb.storage.from('project-files').getPublicUrl(path).data.publicUrl
-      // Save photo_url to DB immediately (only photo_url — no avatar column)
       const { error: saveErr } = await sb.from('users').update({ photo_url: photoUrl }).eq('id', user.id)
       if (saveErr) throw saveErr
-      // Update all state immediately
       setForm(f => ({ ...f, photo_url: photoUrl }))
       setUser(u => ({ ...u, photo_url: photoUrl }))
       setSession({ ...session, photoUrl: photoUrl })
@@ -562,7 +561,6 @@ function UserProfile({ session }) {
         <div className="section-title">My Profile</div>
         <HelpPanel screen="profile" />
       </div>
-
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
         <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--surface2)', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
           {avatarContent}
@@ -578,7 +576,6 @@ function UserProfile({ session }) {
           </div>
         </div>
       </div>
-
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
         {[{ key: 'info', label: '👤 Info' }, { key: 'avatar', label: '🖼️ Photo' }, { key: 'pin', label: '🔑 Password' }].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
@@ -587,7 +584,6 @@ function UserProfile({ session }) {
           </button>
         ))}
       </div>
-
       {activeTab === 'info' && (
         <div className="card">
           <div className="grid-2">
@@ -626,15 +622,11 @@ function UserProfile({ session }) {
           <button className="btn btn-primary" onClick={saveInfo} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
         </div>
       )}
-
       {activeTab === 'avatar' && (
         <div className="card">
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, padding: '12px 16px', background: 'var(--surface2)', borderRadius: 'var(--radius-lg)' }}>
             <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--surface)', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-              {form.photo_url
-                ? <img src={form.photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <span style={{ fontSize: 32, color: 'var(--text3)' }}>👤</span>
-              }
+              {form.photo_url ? <img src={form.photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 32, color: 'var(--text3)' }}>👤</span>}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600, fontSize: 14 }}>Current photo</div>
@@ -661,7 +653,6 @@ function UserProfile({ session }) {
           </div>
         </div>
       )}
-
       {activeTab === 'pin' && (
         <div className="card">
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Change password</div>
