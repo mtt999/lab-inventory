@@ -12,6 +12,11 @@ function canEdit(session) {
   return session?.role === 'admin' || session?.role === 'user'
 }
 
+// Returns first name — stored in last_name column, fallback to name
+function firstName(u) {
+  return u?.last_name || u?.name || ''
+}
+
 function StatusBadge({ done }) {
   return (
     <span className={`badge ${done ? 'badge-ok' : 'badge-low'}`}>
@@ -114,7 +119,7 @@ function FreshTraining({ students, session }) {
               return (
                 <tr key={u.id}>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{u.name}</div>
+                    <div style={{ fontWeight: 600 }}>{firstName(u)}</div>
                     {u.supervisor && <div style={{ fontSize: 11, color: 'var(--text3)' }}>{u.supervisor}</div>}
                   </td>
                   <td><span style={{ fontSize: 12, color: 'var(--text2)' }}>{u.project_group || '—'}</span></td>
@@ -223,7 +228,7 @@ function GolfCarTraining({ students, session }) {
             const rec = getRecord(u.id)
             return (
               <tr key={u.id}>
-                <td><div style={{ fontWeight: 600 }}>{u.name}</div></td>
+                <td><div style={{ fontWeight: 600 }}>{firstName(u)}</div></td>
                 <td><span style={{ fontSize: 12, color: 'var(--text2)' }}>{u.project_group || '—'}</span></td>
                 <td>
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: canEdit(session) ? 'pointer' : 'default', marginBottom: 0 }}>
@@ -455,7 +460,7 @@ function EquipmentTraining({ students, session }) {
               <div key={u.id} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', marginBottom: 12, overflow: 'hidden' }}>
                 <div style={{ padding: '12px 16px', background: 'var(--surface2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
-                    <div style={{ fontWeight: 600 }}>{u.name}</div>
+                    <div style={{ fontWeight: 600 }}>{firstName(u)}</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)' }}>{u.project_group || ''}{u.supervisor ? ` · ${u.supervisor}` : ''}</div>
                   </div>
                   {canEdit(session) && <button className="btn btn-sm" onClick={() => setAddingRecord({ userId: u.id })}>+ Add training</button>}
@@ -649,7 +654,7 @@ function BuildingAlarm({ students, session }) {
             const rec = getRecord(u.id)
             return (
               <tr key={u.id}>
-                <td><div style={{ fontWeight: 600 }}>{u.name}</div></td>
+                <td><div style={{ fontWeight: 600 }}>{firstName(u)}</div></td>
                 <td><span style={{ fontSize: 12, color: 'var(--text2)' }}>{u.project_group || '—'}</span></td>
                 <td>
                   {canEdit(session) ? (
@@ -679,28 +684,15 @@ function BuildingAlarm({ students, session }) {
 
 // ══════════════════════════════════════════════════════════════
 // TAB 5 — STUDENT LOCKER
-// Requires Supabase table:
-// CREATE TABLE student_lockers (
-//   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-//   locker_number integer UNIQUE NOT NULL,
-//   user_id uuid REFERENCES users(id) ON DELETE SET NULL,
-//   user_name text,
-//   assigned_by text,
-//   assigned_at timestamptz,
-//   notes text
-// );
-// INSERT INTO student_lockers (locker_number)
-//   SELECT generate_series(1,15);
 // ══════════════════════════════════════════════════════════════
 const TOTAL_LOCKERS = 15
-const UNAVAILABLE_LOCKERS = [16] // bottom row — shown as NOT AVAILABLE if needed
 
 function StudentLocker({ session }) {
   const { toast } = useAppStore()
   const [lockers, setLockers] = useState([])
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
-  const [assigning, setAssigning] = useState(null) // locker being assigned
+  const [assigning, setAssigning] = useState(null)
   const [selectedStudent, setSelectedStudent] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -710,9 +702,8 @@ function StudentLocker({ session }) {
     setLoading(true)
     const [{ data: lk }, { data: st }] = await Promise.all([
       sb.from('student_lockers').select('*').order('locker_number'),
-      sb.from('users').select('id, name, project_group').eq('role', 'student').eq('is_active', true).order('name'),
+      sb.from('users').select('id, name, last_name, project_group').eq('role', 'student').eq('is_active', true).order('name'),
     ])
-    // If table is empty/missing, create virtual locker rows
     if (!lk || lk.length === 0) {
       setLockers(Array.from({ length: TOTAL_LOCKERS }, (_, i) => ({ locker_number: i + 1, user_id: null, user_name: null })))
     } else {
@@ -726,16 +717,17 @@ function StudentLocker({ session }) {
     if (!selectedStudent) { toast('Select a student.'); return }
     const student = students.find(s => s.id === selectedStudent)
     if (!student) return
+    const displayName = firstName(student)
     const { error } = await sb.from('student_lockers').upsert({
       locker_number: lockerNumber,
       user_id: student.id,
-      user_name: student.name,
+      user_name: displayName,
       assigned_by: session.username,
       assigned_at: new Date().toISOString(),
       notes: notes || null,
     }, { onConflict: 'locker_number' })
     if (error) { toast('Error: ' + error.message); return }
-    toast(`Locker ${lockerNumber} assigned to ${student.name} ✓`)
+    toast(`Locker ${lockerNumber} assigned to ${displayName} ✓`)
     setAssigning(null); setSelectedStudent(''); setNotes('')
     load()
   }
@@ -752,12 +744,10 @@ function StudentLocker({ session }) {
 
   if (loading) return <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
 
-  // For students: find their own locker
   const myLocker = session?.role === 'student'
-    ? lockers.find(l => l.user_id === session.userId || l.user_name === session.username)
+    ? lockers.find(l => l.user_id === session.userId)
     : null
 
-  // Stats
   const assigned = lockers.filter(l => l.user_name).length
   const available = TOTAL_LOCKERS - assigned
 
@@ -771,25 +761,17 @@ function StudentLocker({ session }) {
         </div>
       </div>
 
-      {/* STUDENT VIEW — see only their locker */}
       {session?.role === 'student' && (
         <div>
           {myLocker ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 20px' }}>
               <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16 }}>Your assigned locker</div>
-              <div style={{
-                width: 140, height: 140, borderRadius: 16,
-                background: 'var(--accent)', color: '#fff',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.15)', border: '3px solid var(--accent)',
-              }}>
+              <div style={{ width: 140, height: 140, borderRadius: 16, background: 'var(--accent)', color: '#fff', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 32px rgba(0,0,0,0.15)' }}>
                 <div style={{ fontSize: 64, fontWeight: 800, lineHeight: 1 }}>{myLocker.locker_number}</div>
                 <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>Your Locker</div>
               </div>
               {myLocker.notes && (
-                <div style={{ marginTop: 16, fontSize: 13, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 8, padding: '8px 16px', maxWidth: 300, textAlign: 'center' }}>
-                  📝 {myLocker.notes}
-                </div>
+                <div style={{ marginTop: 16, fontSize: 13, color: 'var(--text2)', background: 'var(--surface2)', borderRadius: 8, padding: '8px 16px', maxWidth: 300, textAlign: 'center' }}>📝 {myLocker.notes}</div>
               )}
               <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text3)' }}>
                 Assigned {myLocker.assigned_at ? new Date(myLocker.assigned_at).toLocaleDateString() : ''}
@@ -806,10 +788,8 @@ function StudentLocker({ session }) {
         </div>
       )}
 
-      {/* ADMIN/STAFF VIEW — locker grid */}
       {canEdit(session) && (
         <div>
-          {/* Visual locker grid — 3 columns like the photo */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, maxWidth: 500, margin: '0 auto 28px' }}>
             {Array.from({ length: TOTAL_LOCKERS }, (_, i) => {
               const num = i + 1
@@ -818,26 +798,17 @@ function StudentLocker({ session }) {
               const isAssigning = assigning === num
               return (
                 <div key={num}
-                  style={{
-                    borderRadius: 10, border: `2px solid ${isAssigning ? 'var(--accent)' : occupied ? '#0369a1' : 'var(--border)'}`,
-                    background: isAssigning ? 'var(--accent-light)' : occupied ? '#e0f2fe' : 'var(--surface)',
-                    padding: '12px 8px', textAlign: 'center', cursor: 'pointer',
-                    transition: 'all 0.15s', position: 'relative',
-                  }}
+                  style={{ borderRadius: 10, border: `2px solid ${isAssigning ? 'var(--accent)' : occupied ? '#0369a1' : 'var(--border)'}`, background: isAssigning ? 'var(--accent-light)' : occupied ? '#e0f2fe' : 'var(--surface)', padding: '12px 8px', textAlign: 'center', cursor: 'pointer', transition: 'all 0.15s' }}
                   onClick={() => { if (!isAssigning) { setAssigning(num); setSelectedStudent(''); setNotes('') } }}
                   onMouseEnter={e => !isAssigning && (e.currentTarget.style.borderColor = 'var(--accent)')}
                   onMouseLeave={e => !isAssigning && (e.currentTarget.style.borderColor = occupied ? '#0369a1' : 'var(--border)')}>
-                  {/* Locker number badge */}
                   <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 36, height: 36, borderRadius: '50%', background: occupied ? '#0369a1' : 'var(--surface2)', color: occupied ? '#fff' : 'var(--text)', fontWeight: 700, fontSize: 16, marginBottom: 6 }}>
                     {num}
                   </div>
                   {occupied ? (
                     <>
                       <div style={{ fontSize: 11, fontWeight: 600, color: '#0369a1', lineHeight: 1.3, wordBreak: 'break-word' }}>{locker.user_name}</div>
-                      <button className="btn btn-sm btn-danger" style={{ marginTop: 6, fontSize: 10, padding: '2px 8px' }}
-                        onClick={e => { e.stopPropagation(); unassignLocker(locker) }}>
-                        Remove
-                      </button>
+                      <button className="btn btn-sm btn-danger" style={{ marginTop: 6, fontSize: 10, padding: '2px 8px' }} onClick={e => { e.stopPropagation(); unassignLocker(locker) }}>Remove</button>
                     </>
                   ) : (
                     <div style={{ fontSize: 11, color: 'var(--text3)' }}>Available</div>
@@ -847,7 +818,6 @@ function StudentLocker({ session }) {
             })}
           </div>
 
-          {/* Assignment panel */}
           {assigning !== null && (
             <div style={{ background: 'var(--surface)', border: '2px solid var(--accent)', borderRadius: 'var(--radius-lg)', padding: 20, maxWidth: 400, margin: '0 auto 20px' }}>
               <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 12 }}>
@@ -859,10 +829,10 @@ function StudentLocker({ session }) {
                 <select value={selectedStudent} onChange={e => setSelectedStudent(e.target.value)} autoFocus>
                   <option value="">— Select student —</option>
                   {students.map(s => {
-                    const hasLocker = lockers.find(l => l.user_id === s.id || l.user_name === s.name)
+                    const hasLocker = lockers.find(l => l.user_id === s.id)
                     return (
                       <option key={s.id} value={s.id} disabled={!!hasLocker}>
-                        {s.name}{s.project_group ? ` (${s.project_group})` : ''}{hasLocker ? ` — Locker ${hasLocker.locker_number}` : ''}
+                        {firstName(s)}{s.project_group ? ` (${s.project_group})` : ''}{hasLocker ? ` — Locker ${hasLocker.locker_number}` : ''}
                       </option>
                     )
                   })}
@@ -873,29 +843,17 @@ function StudentLocker({ session }) {
                 <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g. key given, combination shared…" />
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button className="btn btn-primary" onClick={() => assignLocker(assigning)} disabled={!selectedStudent}>
-                  Assign locker
-                </button>
+                <button className="btn btn-primary" onClick={() => assignLocker(assigning)} disabled={!selectedStudent}>Assign locker</button>
                 <button className="btn" onClick={() => setAssigning(null)}>Cancel</button>
               </div>
             </div>
           )}
 
-          {/* List view */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              All Lockers
-            </div>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)', fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>All Lockers</div>
             <table>
               <thead>
-                <tr>
-                  <th style={{ width: 80 }}>Locker #</th>
-                  <th>Assigned To</th>
-                  <th>Group</th>
-                  <th>Assigned Date</th>
-                  <th>Notes</th>
-                  <th style={{ width: 100 }}></th>
-                </tr>
+                <tr><th style={{ width: 80 }}>Locker #</th><th>Assigned To</th><th>Group</th><th>Assigned Date</th><th>Notes</th><th style={{ width: 100 }}></th></tr>
               </thead>
               <tbody>
                 {Array.from({ length: TOTAL_LOCKERS }, (_, i) => {
@@ -905,9 +863,7 @@ function StudentLocker({ session }) {
                   return (
                     <tr key={num} style={{ background: locker.user_name ? 'transparent' : 'var(--surface2)' }}>
                       <td>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: locker.user_name ? '#0369a1' : 'var(--border)', color: locker.user_name ? '#fff' : 'var(--text3)', fontWeight: 700, fontSize: 13 }}>
-                          {num}
-                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30, borderRadius: '50%', background: locker.user_name ? '#0369a1' : 'var(--border)', color: locker.user_name ? '#fff' : 'var(--text3)', fontWeight: 700, fontSize: 13 }}>{num}</span>
                       </td>
                       <td>
                         {locker.user_name
@@ -916,9 +872,7 @@ function StudentLocker({ session }) {
                         }
                       </td>
                       <td style={{ fontSize: 13, color: 'var(--text2)' }}>{student?.project_group || '—'}</td>
-                      <td style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>
-                        {locker.assigned_at ? new Date(locker.assigned_at).toLocaleDateString() : '—'}
-                      </td>
+                      <td style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{locker.assigned_at ? new Date(locker.assigned_at).toLocaleDateString() : '—'}</td>
                       <td style={{ fontSize: 12, color: 'var(--text2)' }}>{locker.notes || '—'}</td>
                       <td>
                         {locker.user_name ? (
@@ -967,18 +921,20 @@ export default function TrainingRecords() {
   }
 
   async function checkExpiry() {
-    const { data } = await sb.from('training_equipment').select('*, equipment_inventory(equipment_name, nickname), users(name)').lt('expires_at', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
+    const { data } = await sb.from('training_equipment')
+      .select('*, equipment_inventory(equipment_name, nickname), users(name, last_name)')
+      .lt('expires_at', new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0])
     if (data?.length) setExpiryAlerts(data)
   }
 
   const subTabs = [
-    { key: 'fresh',   label: '1 · Fresh Student' },
-    { key: 'golf',    label: '2 · Golf Car' },
+    { key: 'fresh',     label: '1 · Fresh Student' },
+    { key: 'golf',      label: '2 · Golf Car' },
     { key: 'equipment', label: '3 · Equipment' },
-    { key: 'alarm',   label: '4 · Building Alarm' },
+    { key: 'alarm',     label: '4 · Building Alarm' },
     ...(canEdit(session) ? [{ key: 'requests', label: '📋 Training Requests' }] : []),
-    { key: 'exam',    label: '📝 Exam' },
-    { key: 'locker',  label: '🗄️ Student Locker' },
+    { key: 'exam',      label: '📝 Exam' },
+    { key: 'locker',    label: '🗄️ Student Locker' },
   ]
 
   return (
@@ -997,7 +953,7 @@ export default function TrainingRecords() {
           <div style={{ fontWeight: 600, marginBottom: 6 }}>⏰ Retraining Reminders</div>
           {expiryAlerts.map((a, i) => (
             <div key={i} style={{ fontSize: 13 }}>
-              • <strong>{a.users?.name}</strong> — {a.equipment_inventory?.nickname || a.equipment_inventory?.equipment_name} expires {a.expires_at}
+              • <strong>{a.users?.last_name || a.users?.name}</strong> — {a.equipment_inventory?.nickname || a.equipment_inventory?.equipment_name} expires {a.expires_at}
               {new Date(a.expires_at) < new Date() ? ' (EXPIRED)' : ''}
             </div>
           ))}
