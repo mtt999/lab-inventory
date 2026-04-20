@@ -3,8 +3,8 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/ilab/',   // matches new GitHub Pages URL: mtt999.github.io/ilab
+  base: '/Ilab/',   // matches GitHub Pages URL: mtt999.github.io/Ilab
   build: {
-    outDir: 'docs',          // GitHub Pages serves from /docs
+    outDir: 'docs',
   },
 })
