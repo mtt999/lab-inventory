@@ -5,15 +5,60 @@ import { sb } from '../lib/supabase'
 import * as XLSX from 'xlsx'
 import Modal from '../components/Modal'
 
-// ── Constants ─────────────────────────────────────────────────
 const ICONS = ['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰']
 const ROOM_KEYWORDS = ['room','lab','highbay','high bay','bay','shed','office','tool','storage','corridor','hall','area']
 const DEFAULT_ROOM_NAME = 'Janitor Room'
 const UNIT_OPTIONS = ['%', 'Box', 'piece', 'kg', 'L', 'pcs', 'set', 'roll', 'bag', 'bottle']
 
-// ══════════════════════════════════════════════════════════════
-// ROOMS TAB
-// ══════════════════════════════════════════════════════════════
+// ── helper: build rows for one inspection record (all items, rooms stacked) ──
+function buildRecordRows(rec, includeHeader = true) {
+  const rows = []
+  if (includeHeader) {
+    const d = new Date(rec.inspected_at)
+    rows.push(['ICT-Lab Inspection Report'])
+    rows.push(['Date:', d.toLocaleString()])
+    rows.push(['Inspector:', rec.inspector])
+    rows.push([])
+  }
+  // group results by room name
+  const byRoom = {}
+  ;(rec.results || []).forEach(r => {
+    const key = r.room_name || rec.room_name || 'Unknown Room'
+    if (!byRoom[key]) byRoom[key] = []
+    byRoom[key].push(r)
+  })
+  // if no room breakdown just use record room name
+  if (Object.keys(byRoom).length === 0 && rec.room_name) {
+    byRoom[rec.room_name] = rec.results || []
+  }
+  Object.entries(byRoom).forEach(([roomName, items]) => {
+    rows.push([`ROOM: ${roomName}${rec.inspector ? '  —  Inspector: ' + rec.inspector : ''}`])
+    rows.push(['Item', 'Unit', 'Count', 'Min Qty', 'Status', 'Notes'])
+    items.forEach(r => rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || '']))
+    rows.push([]) // blank spacer between rooms
+  })
+  return rows
+}
+
+// ── helper: style a worksheet (blue room headers, red LOW rows) ──
+function styleSheet(ws, startRow = 0) {
+  if (!ws['!ref']) return
+  const range = XLSX.utils.decode_range(ws['!ref'])
+  for (let R = range.s.r; R <= range.e.r; R++) {
+    const cell = ws[XLSX.utils.encode_cell({ r: R, c: 0 })]
+    if (!cell) continue
+    const val = String(cell.v || '')
+    if (val.startsWith('ROOM:')) {
+      // blue header row
+      for (let C = 0; C <= 5; C++) {
+        const addr = XLSX.utils.encode_cell({ r: R, c: C })
+        if (!ws[addr]) ws[addr] = { v: '', t: 's' }
+        ws[addr].s = { fill: { fgColor: { rgb: '0D47A1' } }, font: { color: { rgb: 'FFFFFF' }, bold: true } }
+      }
+    }
+  }
+}
+
 function IconPicker({ selected, onSelect }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
@@ -156,9 +201,6 @@ function RoomsTab() {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// SUPPLIES TAB
-// ══════════════════════════════════════════════════════════════
 function SupplyModal({ supply, rooms, defaultRoomId, onClose, onSaved }) {
   const { toast } = useAppStore()
   const [form, setForm] = useState({
@@ -176,11 +218,7 @@ function SupplyModal({ supply, rooms, defaultRoomId, onClose, onSaved }) {
 
   async function save() {
     if (!form.name.trim() || !form.unit.trim()) { toast('Please fill all required fields.'); return }
-    const payload = {
-      ...form,
-      min_qty: parseFloat(form.min_qty) || 0,
-      links: form.links.filter(l => l.url)
-    }
+    const payload = { ...form, min_qty: parseFloat(form.min_qty) || 0, links: form.links.filter(l => l.url) }
     if (supply) await sb.from('supplies').update(payload).eq('id', supply.id)
     else await sb.from('supplies').insert(payload)
     toast('Supply saved.'); onSaved(); onClose()
@@ -198,24 +236,14 @@ function SupplyModal({ supply, rooms, defaultRoomId, onClose, onSaved }) {
         <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Nitrile Gloves (M)" />
       </div>
       <div className="grid-2">
-        {/* Unit — dropdown with options */}
-        <div className="field">
-          <label>Unit *</label>
+        <div className="field"><label>Unit *</label>
           <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
             {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
         </div>
-        {/* Min qty — decimal input, defaults to last saved value */}
-        <div className="field">
-          <label>Minimum qty</label>
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            value={form.min_qty}
-            onChange={e => setForm(f => ({ ...f, min_qty: e.target.value }))}
-            placeholder="e.g. 85.5"
-          />
+        <div className="field"><label>Minimum qty</label>
+          <input type="number" step="0.01" min="0" value={form.min_qty}
+            onChange={e => setForm(f => ({ ...f, min_qty: e.target.value }))} placeholder="e.g. 85.5" />
         </div>
       </div>
       <div className="field"><label>Notes</label>
@@ -315,46 +343,89 @@ function ExportData() {
     setData(data || []); setLoading(false)
   }
 
+  // ── Single record export: 1 tab, all rooms stacked ──
+  async function exportSingleRecord(id) {
+    const { data: rec } = await sb.from('inspections').select('*').eq('id', id).single()
+    if (!rec) return
+    const d = new Date(rec.inspected_at)
+    const dateStr = d.toLocaleDateString('en-CA')
+    const wb = XLSX.utils.book_new()
+    const rows = buildRecordRows(rec, true)
+    rows[0] = [`ICT-Lab Inspection Report — ${dateStr} — ${rec.inspector}`]
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 30 }]
+    XLSX.utils.book_append_sheet(wb, ws, dateStr)
+    XLSX.writeFile(wb, `ICT-Lab_${dateStr}_${rec.room_name || 'Report'}.xlsx`)
+    toast('Exported!')
+  }
+
+  // ── View record in app ──
   async function viewRecord(id) {
     const { data } = await sb.from('inspections').select('*').eq('id', id).single()
     if (data) { useAppStore.getState().setLastRecord(data); useAppStore.getState().setScreen('results') }
   }
 
-  function safeSheetName(name) { return name.replace(/[:\\\/?*\[\]]/g, '-').substring(0, 31) }
-  function fmtLinks(links) { return (links || []).map(l => `${l.label || 'Link'}: ${l.url}`).join(' | ') }
-
+  // ── All-time export: 1 tab per date, all rooms in each tab + Summary ──
   async function exportAll() {
     toast('Loading…')
     const { data: allRecs } = await sb.from('inspections').select('*').order('inspected_at', { ascending: true })
     if (!allRecs?.length) { toast('No records found.'); return }
+
     const wb = XLSX.utils.book_new()
-    const sumData = [['ICT-Lab — All Inspection Records'], ['Exported:', new Date().toLocaleString()], ['Total:', allRecs.length], [], ['Date', 'Room', 'Inspector', 'Total Items', 'Low Items', 'Status']]
+
+    // Summary tab
+    const sumRows = [
+      ['ICT-Lab — All Inspection Records'],
+      ['Exported:', new Date().toLocaleString()],
+      ['Total inspections:', allRecs.length],
+      [],
+      ['Date', 'Room', 'Inspector', 'Total Items', 'Low Items', 'Status']
+    ]
     allRecs.forEach(rec => {
       const d = new Date(rec.inspected_at)
-      sumData.push([d.toLocaleDateString('en-CA') + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }), rec.room_name, rec.inspector, (rec.results || []).length, rec.flag_count || 0, rec.flag_count > 0 ? 'Has low items' : 'All OK'])
+      sumRows.push([
+        d.toLocaleDateString('en-CA') + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        rec.room_name, rec.inspector,
+        (rec.results || []).length,
+        rec.flag_count || 0,
+        rec.flag_count > 0 ? 'Has low items' : 'All OK'
+      ])
     })
-    const sumWs = XLSX.utils.aoa_to_sheet(sumData)
+    const sumWs = XLSX.utils.aoa_to_sheet(sumRows)
     sumWs['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 14 }]
     XLSX.utils.book_append_sheet(wb, sumWs, 'Summary')
-    const sheetNames = new Set()
+
+    // Group records by date
+    const byDate = {}
     allRecs.forEach(rec => {
-      const d = new Date(rec.inspected_at)
-      const dateStr = d.toLocaleDateString('en-CA')
-      const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false }).replace(':', '')
-      const recs = rec.results || [], rlow = recs.filter(r => r.low)
-      let sn = safeSheetName(`${dateStr} ${rec.room_name}`)
-      if (sheetNames.has(sn)) sn = safeSheetName(`${dateStr} ${timeStr} ${rec.room_name}`)
-      let fn = sn, c = 2
-      while (sheetNames.has(fn)) fn = safeSheetName(sn.substring(0, 28) + c++)
-      sheetNames.add(fn)
-      const sd = [['ICT-Lab — Inspection Report'], ['Date:', d.toLocaleString()], ['Room:', rec.room_name], ['Inspector:', rec.inspector], []]
-      if (rlow.length) { sd.push(['⚠ NEEDS RESTOCK'], ['Item', 'Unit', 'Count', 'Min', 'Shortage', 'Notes', 'Links']); rlow.forEach(r => sd.push([r.name, r.unit, r.qty, r.min_qty, r.min_qty - r.qty, r.notes || '', fmtLinks(r.links)])); sd.push([]) }
-      sd.push(['ALL ITEMS'], ['Item', 'Unit', 'Count', 'Min', 'Status', 'Notes', 'Links'])
-      recs.forEach(r => sd.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || '', fmtLinks(r.links)]))
-      const ws = XLSX.utils.aoa_to_sheet(sd)
-      ws['!cols'] = [{ wch: 36 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 30 }, { wch: 50 }]
-      XLSX.utils.book_append_sheet(wb, ws, fn)
+      const dateStr = new Date(rec.inspected_at).toLocaleDateString('en-CA')
+      if (!byDate[dateStr]) byDate[dateStr] = []
+      byDate[dateStr].push(rec)
     })
+
+    // One tab per date — all rooms stacked in that tab
+    Object.entries(byDate).forEach(([dateStr, recs]) => {
+      const rows = []
+      rows.push([`ICT-Lab — ${dateStr} — All Rooms`])
+      rows.push([])
+      recs.forEach(rec => {
+        const d = new Date(rec.inspected_at)
+        const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        // Room header row
+        rows.push([`ROOM: ${rec.room_name}  —  Inspector: ${rec.inspector}  —  ${timeStr}`])
+        rows.push(['Item', 'Unit', 'Count', 'Min Qty', 'Status', 'Notes'])
+        ;(rec.results || []).forEach(r => {
+          rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || ''])
+        })
+        rows.push([]) // blank spacer
+      })
+      const ws = XLSX.utils.aoa_to_sheet(rows)
+      ws['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 30 }]
+      // Sheet name max 31 chars
+      const sheetName = dateStr.substring(0, 31)
+      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    })
+
     XLSX.writeFile(wb, `ICT-Lab_AllRecords_${new Date().toLocaleDateString('en-CA')}.xlsx`)
     toast(`Exported ${allRecs.length} inspections!`)
   }
@@ -390,19 +461,22 @@ function ExportData() {
                 <span style={{ fontSize: 13, color: 'var(--text3)', transform: open ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>▼</span>
               </div>
               {open && records.map(rec => (
-                <div key={rec.id} onClick={() => viewRecord(rec.id)}
-                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '14px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', transition: 'all 0.15s' }}
+                <div key={rec.id}
+                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '14px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
                   onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
-                  <div>
+                  <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => viewRecord(rec.id)}>
                     <div style={{ fontWeight: 600, fontSize: 15 }}>{rec.room_name}</div>
                     <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 2 }}>
                       {new Date(rec.inspected_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {new Date(rec.inspected_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {rec.inspector}
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right' }}>
-                    {rec.flag_count > 0 ? <div style={{ fontSize: 12, color: 'var(--accent2)', fontWeight: 500 }}>{rec.flag_count} low item{rec.flag_count > 1 ? 's' : ''}</div> : <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>All OK</div>}
-                    <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>tap to view →</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ textAlign: 'right' }}>
+                      {rec.flag_count > 0 ? <div style={{ fontSize: 12, color: 'var(--accent2)', fontWeight: 500 }}>{rec.flag_count} low item{rec.flag_count > 1 ? 's' : ''}</div> : <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>All OK</div>}
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>tap to view →</div>
+                    </div>
+                    <button className="btn btn-sm" onClick={() => exportSingleRecord(rec.id)} style={{ flexShrink: 0 }}>📥 Export</button>
                   </div>
                 </div>
               ))}
@@ -414,9 +488,6 @@ function ExportData() {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// IMPORT TAB
-// ══════════════════════════════════════════════════════════════
 function ImportTab() {
   const { rooms, supplies, refreshCache, toast } = useAppStore()
   const [importData, setImportData] = useState(null)
@@ -535,9 +606,6 @@ function ImportTab() {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// SETTINGS TAB
-// ══════════════════════════════════════════════════════════════
 function SettingsTab() {
   const { settings, refreshCache, toast } = useAppStore()
 
@@ -568,9 +636,6 @@ function SettingsTab() {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// MAIN HOME / SUPPLY INVENTORY
-// ══════════════════════════════════════════════════════════════
 export default function Home() {
   const { rooms, supplies, setScreen, setInspection, settings, toast, session } = useAppStore()
   const [subTab, setSubTab] = useState('inspect')
@@ -624,7 +689,7 @@ export default function Home() {
         ))}
       </div>
 
-      {subTab === 'inspect'  && (
+      {subTab === 'inspect' && (
         <div>
           {rooms.length === 0 ? (
             <div className="empty-state"><div className="empty-icon">🏠</div>No rooms yet. Go to Rooms tab to add rooms.</div>
