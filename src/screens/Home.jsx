@@ -331,10 +331,12 @@ function SuppliesTab() {
 // EXPORT DATA TAB
 // ══════════════════════════════════════════════════════════════
 function ExportData() {
-  const { toast } = useAppStore()
+  const { toast, session } = useAppStore()
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [collapsed, setCollapsed] = useState({})
+
+  const canDelete = session?.role === 'admin' || session?.role === 'user'
 
   useEffect(() => { load() }, [])
 
@@ -343,26 +345,69 @@ function ExportData() {
     setData(data || []); setLoading(false)
   }
 
-  // ── Single record export: 1 tab, all rooms stacked ──
-  async function exportSingleRecord(id) {
-    const { data: rec } = await sb.from('inspections').select('*').eq('id', id).single()
-    if (!rec) return
-    const d = new Date(rec.inspected_at)
-    const dateStr = d.toLocaleDateString('en-CA')
-    const wb = XLSX.utils.book_new()
-    const rows = buildRecordRows(rec, true)
-    rows[0] = [`ICT-Lab Inspection Report — ${dateStr} — ${rec.inspector}`]
-    const ws = XLSX.utils.aoa_to_sheet(rows)
-    ws['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 30 }]
-    XLSX.utils.book_append_sheet(wb, ws, dateStr)
-    XLSX.writeFile(wb, `ICT-Lab_${dateStr}_${rec.room_name || 'Report'}.xlsx`)
-    toast('Exported!')
+  async function deleteRecord(id) {
+    if (!confirm('Delete this inspection record?')) return
+    await sb.from('inspections').delete().eq('id', id)
+    toast('Record deleted.')
+    load()
   }
 
   // ── View record in app ──
   async function viewRecord(id) {
     const { data } = await sb.from('inspections').select('*').eq('id', id).single()
     if (data) { useAppStore.getState().setLastRecord(data); useAppStore.getState().setScreen('results') }
+  }
+
+  // ── Export specific date: 1 tab, all rooms stacked
+  //    Inspected rooms show results, uninspected rooms show current min_qty + note ──
+  async function exportByDate(dateStr) {
+    toast('Loading…')
+    // Get all inspections on this date
+    const { data: allRecs } = await sb.from('inspections').select('*').order('inspected_at', { ascending: true })
+    const dateRecs = (allRecs || []).filter(r => new Date(r.inspected_at).toLocaleDateString('en-CA') === dateStr)
+
+    // Get all rooms and their current supplies
+    const { data: allRooms } = await sb.from('rooms').select('*').order('name')
+    const { data: allSupplies } = await sb.from('supplies').select('*')
+
+    const wb = XLSX.utils.book_new()
+    const rows = []
+    rows.push([`ICT-Lab Inspection Report — ${dateStr}`])
+    rows.push([`Exported: ${new Date().toLocaleString()}`])
+    rows.push([])
+
+    const inspectedRoomNames = new Set(dateRecs.map(r => r.room_name))
+
+    // Inspected rooms first
+    dateRecs.forEach(rec => {
+      const d = new Date(rec.inspected_at)
+      const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      rows.push([`ROOM: ${rec.room_name}  —  Inspector: ${rec.inspector}  —  ${timeStr}`])
+      rows.push(['Item', 'Unit', 'Count', 'Min Qty', 'Status', 'Notes'])
+      ;(rec.results || []).forEach(r => {
+        rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || ''])
+      })
+      rows.push([])
+    })
+
+    // Uninspected rooms — show current supply numbers with note
+    ;(allRooms || []).forEach(room => {
+      if (inspectedRoomNames.has(room.name)) return
+      const roomSupplies = (allSupplies || []).filter(s => s.room_id === room.id)
+      if (!roomSupplies.length) return
+      rows.push([`ROOM: ${room.name}  —  NOT INSPECTED ON ${dateStr}`])
+      rows.push(['Item', 'Unit', 'Current Min Qty', '', 'Status', 'Notes'])
+      roomSupplies.forEach(s => {
+        rows.push([s.name, s.unit, s.min_qty, '', 'Not inspected', s.notes || ''])
+      })
+      rows.push([])
+    })
+
+    const ws = XLSX.utils.aoa_to_sheet(rows)
+    ws['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 16 }, { wch: 30 }]
+    XLSX.utils.book_append_sheet(wb, ws, dateStr.substring(0, 31))
+    XLSX.writeFile(wb, `ICT-Lab_${dateStr}.xlsx`)
+    toast('Exported!')
   }
 
   // ── All-time export: 1 tab per date, all rooms in each tab + Summary ──
@@ -395,7 +440,7 @@ function ExportData() {
     sumWs['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 14 }]
     XLSX.utils.book_append_sheet(wb, sumWs, 'Summary')
 
-    // Group records by date
+    // Group by date
     const byDate = {}
     allRecs.forEach(rec => {
       const dateStr = new Date(rec.inspected_at).toLocaleDateString('en-CA')
@@ -403,7 +448,7 @@ function ExportData() {
       byDate[dateStr].push(rec)
     })
 
-    // One tab per date — all rooms stacked in that tab
+    // One tab per date
     Object.entries(byDate).forEach(([dateStr, recs]) => {
       const rows = []
       rows.push([`ICT-Lab — ${dateStr} — All Rooms`])
@@ -411,19 +456,16 @@ function ExportData() {
       recs.forEach(rec => {
         const d = new Date(rec.inspected_at)
         const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-        // Room header row
         rows.push([`ROOM: ${rec.room_name}  —  Inspector: ${rec.inspector}  —  ${timeStr}`])
         rows.push(['Item', 'Unit', 'Count', 'Min Qty', 'Status', 'Notes'])
         ;(rec.results || []).forEach(r => {
           rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || ''])
         })
-        rows.push([]) // blank spacer
+        rows.push([])
       })
       const ws = XLSX.utils.aoa_to_sheet(rows)
       ws['!cols'] = [{ wch: 36 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 30 }]
-      // Sheet name max 31 chars
-      const sheetName = dateStr.substring(0, 31)
-      XLSX.utils.book_append_sheet(wb, ws, sheetName)
+      XLSX.utils.book_append_sheet(wb, ws, dateStr.substring(0, 31))
     })
 
     XLSX.writeFile(wb, `ICT-Lab_AllRecords_${new Date().toLocaleDateString('en-CA')}.xlsx`)
@@ -441,6 +483,13 @@ function ExportData() {
     months[key].records.push(rec)
   })
 
+  // Group records by date for the Export by Date button
+  const byDate = {}
+  data.forEach(rec => {
+    const dateStr = new Date(rec.inspected_at).toLocaleDateString('en-CA')
+    if (!byDate[dateStr]) byDate[dateStr] = rec
+  })
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
@@ -450,6 +499,8 @@ function ExportData() {
       {data.length === 0 ? <div className="empty-state"><div className="empty-icon">📋</div>No inspections yet.</div>
         : Object.keys(months).sort((a, b) => b.localeCompare(a)).map(key => {
           const { label, records } = months[key], open = !collapsed[key]
+          // get unique dates in this month
+          const datesInMonth = [...new Set(records.map(r => new Date(r.inspected_at).toLocaleDateString('en-CA')))]
           return (
             <div key={key} style={{ marginBottom: 24 }}>
               <div onClick={() => setCollapsed(c => ({ ...c, [key]: !c[key] }))}
@@ -458,7 +509,10 @@ function ExportData() {
                   <span style={{ fontSize: 15, fontWeight: 600 }}>{label}</span>
                   <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{records.length} inspection{records.length !== 1 ? 's' : ''}</span>
                 </div>
-                <span style={{ fontSize: 13, color: 'var(--text3)', transform: open ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>▼</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {/* Export all dates in this month */}
+                  <span style={{ fontSize: 13, color: 'var(--text3)', transform: open ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>▼</span>
+                </div>
               </div>
               {open && records.map(rec => (
                 <div key={rec.id}
@@ -471,12 +525,25 @@ function ExportData() {
                       {new Date(rec.inspected_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {new Date(rec.inspected_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {rec.inspector}
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <div style={{ textAlign: 'right' }}>
-                      {rec.flag_count > 0 ? <div style={{ fontSize: 12, color: 'var(--accent2)', fontWeight: 500 }}>{rec.flag_count} low item{rec.flag_count > 1 ? 's' : ''}</div> : <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>All OK</div>}
+                      {rec.flag_count > 0
+                        ? <div style={{ fontSize: 12, color: 'var(--accent2)', fontWeight: 500 }}>{rec.flag_count} low item{rec.flag_count > 1 ? 's' : ''}</div>
+                        : <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>All OK</div>}
                       <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>tap to view →</div>
                     </div>
-                    <button className="btn btn-sm" onClick={() => exportSingleRecord(rec.id)} style={{ flexShrink: 0 }}>📥 Export</button>
+                    {/* Export this date (all rooms) */}
+                    <button className="btn btn-sm" style={{ flexShrink: 0 }}
+                      onClick={() => exportByDate(new Date(rec.inspected_at).toLocaleDateString('en-CA'))}>
+                      📥 Export date
+                    </button>
+                    {/* Delete — admin and staff only */}
+                    {canDelete && (
+                      <button className="btn btn-sm btn-danger" style={{ flexShrink: 0 }}
+                        onClick={() => deleteRecord(rec.id)}>
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
