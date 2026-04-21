@@ -1,5 +1,5 @@
-import { useAppStore } from '../store/useAppStore'
-import { sb } from '../lib/supabase'
+import { useAppStore } from './store/useAppStore'
+import { sb } from './lib/supabase'
 import { useState } from 'react'
 
 export default function Login() {
