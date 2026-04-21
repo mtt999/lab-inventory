@@ -54,7 +54,7 @@ export default function Login() {
 
         {/* Logo — replaces old iLab text + repeated lines */}
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <svg width="100" height="100" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+          <svg width="160" height="160" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
             <polygon points="256,4 468,126 468,378 256,500 44,378 44,126" fill="#ffb380"/>
             <polygon points="256,14 458,132 458,372 256,490 54,372 54,132" fill="#ff7f2a"/>
             <polygon points="256,30 450,140 450,362 256,472 62,362 62,140" fill="#000080"/>
