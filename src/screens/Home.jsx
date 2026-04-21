@@ -335,6 +335,8 @@ function ExportData() {
   const [data, setData] = useState([])
   const [loading, setLoading] = useState(true)
   const [collapsed, setCollapsed] = useState({})
+  const [exportTab, setExportTab] = useState('dates')
+  const [selectedDate, setSelectedDate] = useState('')
 
   const canDelete = session?.role === 'admin' || session?.role === 'user'
 
@@ -352,21 +354,17 @@ function ExportData() {
     load()
   }
 
-  // ── View record in app ──
   async function viewRecord(id) {
     const { data } = await sb.from('inspections').select('*').eq('id', id).single()
     if (data) { useAppStore.getState().setLastRecord(data); useAppStore.getState().setScreen('results') }
   }
 
-  // ── Export specific date: 1 tab, all rooms stacked
-  //    Inspected rooms show results, uninspected rooms show current min_qty + note ──
+  // ── Export for a specific date: 1 tab, all rooms stacked ──
   async function exportByDate(dateStr) {
+    if (!dateStr) { toast('Please select a date.'); return }
     toast('Loading…')
-    // Get all inspections on this date
     const { data: allRecs } = await sb.from('inspections').select('*').order('inspected_at', { ascending: true })
     const dateRecs = (allRecs || []).filter(r => new Date(r.inspected_at).toLocaleDateString('en-CA') === dateStr)
-
-    // Get all rooms and their current supplies
     const { data: allRooms } = await sb.from('rooms').select('*').order('name')
     const { data: allSupplies } = await sb.from('supplies').select('*')
 
@@ -378,28 +376,22 @@ function ExportData() {
 
     const inspectedRoomNames = new Set(dateRecs.map(r => r.room_name))
 
-    // Inspected rooms first
     dateRecs.forEach(rec => {
       const d = new Date(rec.inspected_at)
       const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
       rows.push([`ROOM: ${rec.room_name}  —  Inspector: ${rec.inspector}  —  ${timeStr}`])
       rows.push(['Item', 'Unit', 'Count', 'Min Qty', 'Status', 'Notes'])
-      ;(rec.results || []).forEach(r => {
-        rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || ''])
-      })
+      ;(rec.results || []).forEach(r => rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || '']))
       rows.push([])
     })
 
-    // Uninspected rooms — show current supply numbers with note
     ;(allRooms || []).forEach(room => {
       if (inspectedRoomNames.has(room.name)) return
       const roomSupplies = (allSupplies || []).filter(s => s.room_id === room.id)
       if (!roomSupplies.length) return
       rows.push([`ROOM: ${room.name}  —  NOT INSPECTED ON ${dateStr}`])
       rows.push(['Item', 'Unit', 'Current Min Qty', '', 'Status', 'Notes'])
-      roomSupplies.forEach(s => {
-        rows.push([s.name, s.unit, s.min_qty, '', 'Not inspected', s.notes || ''])
-      })
+      roomSupplies.forEach(s => rows.push([s.name, s.unit, s.min_qty, '', 'Not inspected', s.notes || '']))
       rows.push([])
     })
 
@@ -410,7 +402,7 @@ function ExportData() {
     toast('Exported!')
   }
 
-  // ── All-time export: 1 tab per date, all rooms in each tab + Summary ──
+  // ── All-time export: Summary tab + 1 tab per date ──
   async function exportAll() {
     toast('Loading…')
     const { data: allRecs } = await sb.from('inspections').select('*').order('inspected_at', { ascending: true })
@@ -418,7 +410,6 @@ function ExportData() {
 
     const wb = XLSX.utils.book_new()
 
-    // Summary tab
     const sumRows = [
       ['ICT-Lab — All Inspection Records'],
       ['Exported:', new Date().toLocaleString()],
@@ -440,7 +431,6 @@ function ExportData() {
     sumWs['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 14 }]
     XLSX.utils.book_append_sheet(wb, sumWs, 'Summary')
 
-    // Group by date
     const byDate = {}
     allRecs.forEach(rec => {
       const dateStr = new Date(rec.inspected_at).toLocaleDateString('en-CA')
@@ -448,7 +438,6 @@ function ExportData() {
       byDate[dateStr].push(rec)
     })
 
-    // One tab per date
     Object.entries(byDate).forEach(([dateStr, recs]) => {
       const rows = []
       rows.push([`ICT-Lab — ${dateStr} — All Rooms`])
@@ -458,9 +447,7 @@ function ExportData() {
         const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         rows.push([`ROOM: ${rec.room_name}  —  Inspector: ${rec.inspector}  —  ${timeStr}`])
         rows.push(['Item', 'Unit', 'Count', 'Min Qty', 'Status', 'Notes'])
-        ;(rec.results || []).forEach(r => {
-          rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || ''])
-        })
+        ;(rec.results || []).forEach(r => rows.push([r.name, r.unit, r.qty, r.min_qty, r.low ? 'LOW' : 'OK', r.notes || '']))
         rows.push([])
       })
       const ws = XLSX.utils.aoa_to_sheet(rows)
@@ -474,6 +461,7 @@ function ExportData() {
 
   if (loading) return <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
 
+  // Group by month for Inspection Dates tab
   const months = {}
   data.forEach(rec => {
     const d = new Date(rec.inspected_at)
@@ -483,74 +471,144 @@ function ExportData() {
     months[key].records.push(rec)
   })
 
-  // Group records by date for the Export by Date button
-  const byDate = {}
-  data.forEach(rec => {
-    const dateStr = new Date(rec.inspected_at).toLocaleDateString('en-CA')
-    if (!byDate[dateStr]) byDate[dateStr] = rec
+  // All unique inspection dates for the calendar tab
+  const inspectionDates = [...new Set(data.map(r => new Date(r.inspected_at).toLocaleDateString('en-CA')))]
+
+  const subTabStyle = (active) => ({
+    padding: '8px 18px', border: 'none', background: 'transparent',
+    fontFamily: 'var(--sans)', fontSize: 13, fontWeight: 500, cursor: 'pointer',
+    color: active ? 'var(--accent)' : 'var(--text2)',
+    borderBottom: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
+    whiteSpace: 'nowrap', transition: 'all 0.15s'
   })
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div style={{ fontSize: 14, color: 'var(--text2)' }}>{data.length} inspection{data.length !== 1 ? 's' : ''} recorded</div>
-        <button className="btn btn-sm btn-primary" onClick={exportAll}>📊 Export all to Excel</button>
+      {/* 3 sub-tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20 }}>
+        <button style={subTabStyle(exportTab === 'dates')}    onClick={() => setExportTab('dates')}>📋 Inspection Dates</button>
+        <button style={subTabStyle(exportTab === 'specific')} onClick={() => setExportTab('specific')}>📅 Specific Date</button>
+        <button style={subTabStyle(exportTab === 'all')}      onClick={() => setExportTab('all')}>📊 All Records</button>
       </div>
-      {data.length === 0 ? <div className="empty-state"><div className="empty-icon">📋</div>No inspections yet.</div>
-        : Object.keys(months).sort((a, b) => b.localeCompare(a)).map(key => {
-          const { label, records } = months[key], open = !collapsed[key]
-          // get unique dates in this month
-          const datesInMonth = [...new Set(records.map(r => new Date(r.inspected_at).toLocaleDateString('en-CA')))]
-          return (
-            <div key={key} style={{ marginBottom: 24 }}>
-              <div onClick={() => setCollapsed(c => ({ ...c, [key]: !c[key] }))}
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 10 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 15, fontWeight: 600 }}>{label}</span>
-                  <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{records.length} inspection{records.length !== 1 ? 's' : ''}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  {/* Export all dates in this month */}
-                  <span style={{ fontSize: 13, color: 'var(--text3)', transform: open ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>▼</span>
-                </div>
-              </div>
-              {open && records.map(rec => (
-                <div key={rec.id}
-                  style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '14px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
-                  onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
-                  <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => viewRecord(rec.id)}>
-                    <div style={{ fontWeight: 600, fontSize: 15 }}>{rec.room_name}</div>
-                    <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 2 }}>
-                      {new Date(rec.inspected_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {new Date(rec.inspected_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {rec.inspector}
+
+      {/* ── TAB 1: Inspection Dates ── */}
+      {exportTab === 'dates' && (
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 14, color: 'var(--text2)' }}>{data.length} inspection{data.length !== 1 ? 's' : ''} recorded</div>
+          </div>
+          {data.length === 0
+            ? <div className="empty-state"><div className="empty-icon">📋</div>No inspections yet.</div>
+            : Object.keys(months).sort((a, b) => b.localeCompare(a)).map(key => {
+                const { label, records } = months[key], open = !collapsed[key]
+                // unique dates in this month
+                const uniqueDates = [...new Set(records.map(r => new Date(r.inspected_at).toLocaleDateString('en-CA')))]
+                return (
+                  <div key={key} style={{ marginBottom: 24 }}>
+                    {/* Month header with export icon for whole month */}
+                    <div onClick={() => setCollapsed(c => ({ ...c, [key]: !c[key] }))}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 15, fontWeight: 600 }}>{label}</span>
+                        <span style={{ fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text3)' }}>{records.length} inspection{records.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      <span style={{ fontSize: 13, color: 'var(--text3)', transform: open ? 'rotate(0)' : 'rotate(-90deg)', transition: 'transform 0.2s' }}>▼</span>
                     </div>
+
+                    {open && records.map(rec => (
+                      <div key={rec.id}
+                        style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '14px 18px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--accent)'}
+                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
+                        <div style={{ cursor: 'pointer', flex: 1 }} onClick={() => viewRecord(rec.id)}>
+                          <div style={{ fontWeight: 600, fontSize: 15 }}>{rec.room_name}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', marginTop: 2 }}>
+                            {new Date(rec.inspected_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · {new Date(rec.inspected_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} · {rec.inspector}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ textAlign: 'right' }}>
+                            {rec.flag_count > 0
+                              ? <div style={{ fontSize: 12, color: 'var(--accent2)', fontWeight: 500 }}>{rec.flag_count} low item{rec.flag_count > 1 ? 's' : ''}</div>
+                              : <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>All OK</div>}
+                            <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>tap to view →</div>
+                          </div>
+                          <button className="btn btn-sm" style={{ flexShrink: 0 }}
+                            onClick={() => exportByDate(new Date(rec.inspected_at).toLocaleDateString('en-CA'))}>
+                            📥
+                          </button>
+                          {canDelete && (
+                            <button className="btn btn-sm btn-danger" style={{ flexShrink: 0 }}
+                              onClick={() => deleteRecord(rec.id)}>
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ textAlign: 'right' }}>
-                      {rec.flag_count > 0
-                        ? <div style={{ fontSize: 12, color: 'var(--accent2)', fontWeight: 500 }}>{rec.flag_count} low item{rec.flag_count > 1 ? 's' : ''}</div>
-                        : <div style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 500 }}>All OK</div>}
-                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>tap to view →</div>
-                    </div>
-                    {/* Export this date (all rooms) */}
-                    <button className="btn btn-sm" style={{ flexShrink: 0 }}
-                      onClick={() => exportByDate(new Date(rec.inspected_at).toLocaleDateString('en-CA'))}>
-                      📥 Export date
-                    </button>
-                    {/* Delete — admin and staff only */}
-                    {canDelete && (
-                      <button className="btn btn-sm btn-danger" style={{ flexShrink: 0 }}
-                        onClick={() => deleteRecord(rec.id)}>
-                        🗑️
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                )
+              })
+          }
+        </div>
+      )}
+
+      {/* ── TAB 2: Specific Date ── */}
+      {exportTab === 'specific' && (
+        <div style={{ maxWidth: 420 }}>
+          <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16 }}>
+            Select a date to download the full inspection report for all rooms on that day.
+          </div>
+          <div className="card" style={{ padding: 24 }}>
+            <div className="field">
+              <label>Select inspection date</label>
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={e => setSelectedDate(e.target.value)}
+                max={new Date().toLocaleDateString('en-CA')}
+                style={{ fontSize: 15 }}
+              />
             </div>
-          )
-        })
-      }
+            {selectedDate && !inspectionDates.includes(selectedDate) && (
+              <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 12, padding: '8px 12px', background: 'var(--surface2)', borderRadius: 8 }}>
+                ⚠️ No inspections recorded on this date. The report will show current supply quantities for all rooms marked as "Not inspected".
+              </div>
+            )}
+            {selectedDate && inspectionDates.includes(selectedDate) && (
+              <div style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 12, padding: '8px 12px', background: 'var(--accent-light)', borderRadius: 8 }}>
+                ✓ Inspections found for this date.
+              </div>
+            )}
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%', justifyContent: 'center' }}
+              disabled={!selectedDate}
+              onClick={() => exportByDate(selectedDate)}>
+              📥 Download report for {selectedDate || '…'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 3: All Records ── */}
+      {exportTab === 'all' && (
+        <div style={{ maxWidth: 420 }}>
+          <div style={{ fontSize: 14, color: 'var(--text2)', marginBottom: 16 }}>
+            Download one Excel file with all inspection records. Each date gets its own tab with all rooms stacked.
+          </div>
+          <div className="card" style={{ padding: 24 }}>
+            <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 16, lineHeight: 1.6 }}>
+              <div>📋 <strong>Summary</strong> tab — overview of all inspections</div>
+              <div>📅 <strong>One tab per date</strong> — all rooms stacked in each tab</div>
+              <div>🔢 <strong>{data.length}</strong> total inspections across <strong>{Object.keys(months).length}</strong> month{Object.keys(months).length !== 1 ? 's' : ''}</div>
+            </div>
+            <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={exportAll}>
+              📊 Download all records
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
