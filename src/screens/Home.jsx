@@ -9,6 +9,7 @@ import Modal from '../components/Modal'
 const ICONS = ['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰']
 const ROOM_KEYWORDS = ['room','lab','highbay','high bay','bay','shed','office','tool','storage','corridor','hall','area']
 const DEFAULT_ROOM_NAME = 'Janitor Room'
+const UNIT_OPTIONS = ['%', 'Box', 'piece', 'kg', 'L', 'pcs', 'set', 'roll', 'bag', 'bottle']
 
 // ══════════════════════════════════════════════════════════════
 // ROOMS TAB
@@ -162,19 +163,29 @@ function SupplyModal({ supply, rooms, defaultRoomId, onClose, onSaved }) {
   const { toast } = useAppStore()
   const [form, setForm] = useState({
     room_id: supply?.room_id || defaultRoomId || rooms[0]?.id || '',
-    name: supply?.name || '', unit: supply?.unit || '', min_qty: supply?.min_qty || '',
-    notes: supply?.notes || '', links: supply?.links || [],
+    name: supply?.name || '',
+    unit: supply?.unit || '%',
+    min_qty: supply?.min_qty ?? '',
+    notes: supply?.notes || '',
+    links: supply?.links || [],
   })
+
   function addLink() { setForm(f => ({ ...f, links: [...f.links, { label: '', url: '' }] })) }
   function removeLink(i) { setForm(f => ({ ...f, links: f.links.filter((_, idx) => idx !== i) })) }
   function updateLink(i, field, val) { setForm(f => { const links = [...f.links]; links[i] = { ...links[i], [field]: val }; return { ...f, links } }) }
+
   async function save() {
     if (!form.name.trim() || !form.unit.trim()) { toast('Please fill all required fields.'); return }
-    const payload = { ...form, min_qty: parseInt(form.min_qty) || 0, links: form.links.filter(l => l.url) }
+    const payload = {
+      ...form,
+      min_qty: parseFloat(form.min_qty) || 0,
+      links: form.links.filter(l => l.url)
+    }
     if (supply) await sb.from('supplies').update(payload).eq('id', supply.id)
     else await sb.from('supplies').insert(payload)
     toast('Supply saved.'); onSaved(); onClose()
   }
+
   return (
     <Modal onClose={onClose}>
       <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 20 }}>{supply ? 'Edit supply' : 'Add supply'}</div>
@@ -183,12 +194,33 @@ function SupplyModal({ supply, rooms, defaultRoomId, onClose, onSaved }) {
           {rooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
         </select>
       </div>
-      <div className="field"><label>Supply name *</label><input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Nitrile Gloves (M)" /></div>
-      <div className="grid-2">
-        <div className="field"><label>Unit *</label><input value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))} placeholder="boxes" /></div>
-        <div className="field"><label>Minimum qty</label><input type="number" value={form.min_qty} onChange={e => setForm(f => ({ ...f, min_qty: e.target.value }))} placeholder="3" /></div>
+      <div className="field"><label>Supply name *</label>
+        <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. Nitrile Gloves (M)" />
       </div>
-      <div className="field"><label>Notes</label><textarea rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ resize: 'vertical' }} /></div>
+      <div className="grid-2">
+        {/* Unit — dropdown with options */}
+        <div className="field">
+          <label>Unit *</label>
+          <select value={form.unit} onChange={e => setForm(f => ({ ...f, unit: e.target.value }))}>
+            {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+        {/* Min qty — decimal input, defaults to last saved value */}
+        <div className="field">
+          <label>Minimum qty</label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.min_qty}
+            onChange={e => setForm(f => ({ ...f, min_qty: e.target.value }))}
+            placeholder="e.g. 85.5"
+          />
+        </div>
+      </div>
+      <div className="field"><label>Notes</label>
+        <textarea rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ resize: 'vertical' }} />
+      </div>
       <div className="field">
         <label>Purchase links</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
@@ -420,7 +452,7 @@ function ImportTab() {
             const num = parseInt(numVal)
             if (!isNaN(num) && nameVal) {
               if (!currentRoom) { currentRoom = DEFAULT_ROOM_NAME; if (!roomsData[currentRoom]) roomsData[currentRoom] = [] }
-              roomsData[currentRoom].push({ name: String(nameVal).trim(), unit: 'pcs', min_qty: parseInt(minVal) || 1, qty: (qtyVal !== null && !isNaN(parseInt(qtyVal))) ? parseInt(qtyVal) : (parseInt(minVal) || 1) })
+              roomsData[currentRoom].push({ name: String(nameVal).trim(), unit: 'pcs', min_qty: parseFloat(minVal) || 1, qty: (qtyVal !== null && !isNaN(parseFloat(qtyVal))) ? parseFloat(qtyVal) : (parseFloat(minVal) || 1) })
             }
           }
           resolve(roomsData)
