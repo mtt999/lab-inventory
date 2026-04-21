@@ -87,7 +87,7 @@ export default function Login() {
           <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 24 }}>Use your name or email with your password</div>
           <form onSubmit={handleLogin}>
             <div className="field">
-              <label>Name or Email address</label>
+              <label>Email address</label>
               <input
                 type="text"
                 value={identifier}
@@ -117,7 +117,7 @@ export default function Login() {
             {error && (
               <div style={{ fontSize: 13, color: 'var(--accent2)', background: 'var(--accent2-light)', borderRadius: 8, padding: '8px 12px', marginBottom: 16 }}>⚠️ {error}</div>
             )}
-            <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: 15, padding: '12px' }} disabled={loading}>
+            <button type="submit" style={{ width: '100%', justifyContent: 'center', fontSize: 15, padding: '12px', background: '#0d47a1', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600 }} disabled={loading}>
               {loading ? 'Signing in…' : 'Sign in'}
             </button>
           </form>
@@ -131,7 +131,7 @@ export default function Login() {
 
         <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'var(--text3)', lineHeight: 1.8 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text2)' }}>InteleLab (iLab)</div>
-          <div>iLab for ICT · Illinois Center for Transportation</div>
+          <div>iLab for Illinois Center for Transportation (ICT)</div>
           <div style={{ fontWeight: 500, color: 'var(--text2)', marginTop: 4 }}>App developed by Mohsen Motlagh</div>
           <div>© {new Date().getFullYear()} All rights reserved</div>
         </div>
