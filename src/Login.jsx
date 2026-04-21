@@ -2,37 +2,6 @@ import { useAppStore } from '../store/useAppStore'
 import { sb } from '../lib/supabase'
 import { useState } from 'react'
 
-function ILabLogo({ size = 90 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="256,4 468,126 468,378 256,500 44,378 44,126" fill="#ffb380"/>
-      <polygon points="256,14 458,132 458,372 256,490 54,372 54,132" fill="#ff7f2a"/>
-      <polygon points="256,30 450,140 450,362 256,472 62,362 62,140" fill="#000080"/>
-      <polygon points="256,58 422,152 422,350 256,444 90,350 90,152" fill="none" stroke="#ff6b00" strokeWidth="1.2" opacity="0.25"/>
-      <circle cx="256" cy="30"  r="9" fill="#ff6b00"/>
-      <circle cx="450" cy="140" r="9" fill="#ff6b00"/>
-      <circle cx="450" cy="362" r="9" fill="#ff6b00"/>
-      <circle cx="256" cy="472" r="9" fill="#ff6b00"/>
-      <circle cx="62"  cy="362" r="9" fill="#ff6b00"/>
-      <circle cx="62"  cy="140" r="9" fill="#ff6b00"/>
-      <ellipse cx="256" cy="224" rx="138" ry="44" fill="none" stroke="#ff6b00" strokeWidth="3.5" opacity="0.95"/>
-      <circle cx="394" cy="224" r="16" fill="#ff6b00"/>
-      <ellipse cx="256" cy="224" rx="138" ry="44" fill="none" stroke="#ff9a3c" strokeWidth="3" opacity="0.85" transform="rotate(60 256 224)"/>
-      <circle cx="179.16718" cy="294.86069" r="15" fill="#ff9a3c"/>
-      <ellipse cx="256" cy="224" rx="138" ry="44" fill="none" stroke="#ffba6e" strokeWidth="2.5" opacity="0.75" transform="rotate(-60 256 224)"/>
-      <circle cx="325" cy="105" r="14" fill="#ffba6e"/>
-      <circle cx="256" cy="224" r="38" fill="#ff6b00" opacity="0.10"/>
-      <circle cx="256" cy="224" r="26" fill="#ff6b00" opacity="0.22"/>
-      <circle cx="256" cy="224" r="16" fill="#ff8c00" opacity="0.80"/>
-      <circle cx="256" cy="224" r="9"  fill="#ffb347"/>
-      <text x="258.37772" y="415" textAnchor="middle" fontFamily="Arial, sans-serif" fontSize="92" fontWeight="700">
-        <tspan fontStyle="italic" fill="#ff6b00">i</tspan>
-        <tspan fill="#ffffff" dx="-5">Lab</tspan>
-      </text>
-    </svg>
-  )
-}
-
 export default function Login() {
   const { setSession } = useAppStore()
   const [identifier, setIdentifier] = useState('')
@@ -48,7 +17,6 @@ export default function Login() {
 
     const identifierLower = identifier.trim().toLowerCase()
 
-    // 1. Check owner admin
     const { data: adminSettings } = await sb.from('settings').select('value').eq('key', 'admin_email').maybeSingle()
     const adminEmail = adminSettings?.value || 'motlagh999@gmail.com'
     const { data: adminPass } = await sb.from('settings').select('value').eq('key', 'admin_password').maybeSingle()
@@ -57,12 +25,10 @@ export default function Login() {
       setLoading(false); return
     }
 
-    // 2. Try matching by email first
     let user = null
     const { data: byEmail } = await sb.from('users').select('*').eq('is_active', true).ilike('email', identifierLower)
     if (byEmail?.length) user = byEmail[0]
 
-    // 3. If no email match, try matching by name
     if (!user) {
       const { data: byName } = await sb.from('users').select('*').eq('is_active', true).ilike('name', identifier.trim())
       if (byName?.length) user = byName[0]
@@ -72,7 +38,6 @@ export default function Login() {
     if (!user.password) { setError('No password set for this account. Contact your admin.'); setLoading(false); return }
     if (user.password !== password) { setError('Incorrect password.'); setLoading(false); return }
 
-    // 4. Set session
     const adminLevel = user.admin_level || 0
     const role = user.role === 'admin' || adminLevel >= 1 ? 'admin' : user.role
     setSession({
@@ -87,11 +52,34 @@ export default function Login() {
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: 20 }}>
       <div style={{ width: '100%', maxWidth: 400 }}>
 
-        {/* Logo — replaces the old repeated text */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 28 }}>
-          <ILabLogo size={100} />
-          <div style={{ fontWeight: 700, fontSize: 20, color: '#0d47a1', marginTop: 8 }}>InteleLab-ICT</div>
-          <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>Illinois Center for Transportation</div>
+        {/* Logo — replaces old iLab text + repeated lines */}
+        <div style={{ textAlign: 'center', marginBottom: 36 }}>
+          <svg width="100" height="100" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="256,4 468,126 468,378 256,500 44,378 44,126" fill="#ffb380"/>
+            <polygon points="256,14 458,132 458,372 256,490 54,372 54,132" fill="#ff7f2a"/>
+            <polygon points="256,30 450,140 450,362 256,472 62,362 62,140" fill="#000080"/>
+            <polygon points="256,58 422,152 422,350 256,444 90,350 90,152" fill="none" stroke="#ff6b00" strokeWidth="1.2" opacity="0.25"/>
+            <circle cx="256" cy="30"  r="9" fill="#ff6b00"/>
+            <circle cx="450" cy="140" r="9" fill="#ff6b00"/>
+            <circle cx="450" cy="362" r="9" fill="#ff6b00"/>
+            <circle cx="256" cy="472" r="9" fill="#ff6b00"/>
+            <circle cx="62"  cy="362" r="9" fill="#ff6b00"/>
+            <circle cx="62"  cy="140" r="9" fill="#ff6b00"/>
+            <ellipse cx="256" cy="224" rx="138" ry="44" fill="none" stroke="#ff6b00" strokeWidth="3.5" opacity="0.95"/>
+            <circle cx="394" cy="224" r="16" fill="#ff6b00"/>
+            <ellipse cx="256" cy="224" rx="138" ry="44" fill="none" stroke="#ff9a3c" strokeWidth="3" opacity="0.85" transform="rotate(60 256 224)"/>
+            <circle cx="179.16718" cy="294.86069" r="15" fill="#ff9a3c"/>
+            <ellipse cx="256" cy="224" rx="138" ry="44" fill="none" stroke="#ffba6e" strokeWidth="2.5" opacity="0.75" transform="rotate(-60 256 224)"/>
+            <circle cx="325" cy="105" r="14" fill="#ffba6e"/>
+            <circle cx="256" cy="224" r="38" fill="#ff6b00" opacity="0.10"/>
+            <circle cx="256" cy="224" r="26" fill="#ff6b00" opacity="0.22"/>
+            <circle cx="256" cy="224" r="16" fill="#ff8c00" opacity="0.80"/>
+            <circle cx="256" cy="224" r="9"  fill="#ffb347"/>
+            <text x="258.37772" y="415" textAnchor="middle" fontFamily="Arial, sans-serif" fontSize="92" fontWeight="700">
+              <tspan fontStyle="italic" fill="#ff6b00">i</tspan>
+              <tspan fill="#ffffff" dx="-5">Lab</tspan>
+            </text>
+          </svg>
         </div>
 
         <div className="card" style={{ padding: 32 }}>
@@ -143,6 +131,7 @@ export default function Login() {
 
         <div style={{ textAlign: 'center', marginTop: 24, fontSize: 12, color: 'var(--text3)', lineHeight: 1.8 }}>
           <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text2)' }}>InteleLab (iLab)</div>
+          <div>iLab for ICT · Illinois Center for Transportation</div>
           <div style={{ fontWeight: 500, color: 'var(--text2)', marginTop: 4 }}>App developed by Mohsen Motlagh</div>
           <div>© {new Date().getFullYear()} All rights reserved</div>
         </div>
