@@ -8,7 +8,7 @@ import Modal from '../components/Modal'
 const ICONS = ['🧪','🔬','📦','🏥','🧬','💊','🩺','🧫','⚗️','🔭','🩻','🧰']
 const ROOM_KEYWORDS = ['room','lab','highbay','high bay','bay','shed','office','tool','storage','corridor','hall','area']
 const DEFAULT_ROOM_NAME = 'Janitor Room'
-const UNIT_OPTIONS = ['%', 'Box', 'piece', 'kg', 'L', 'pcs', 'set', 'roll', 'bag', 'bottle', 'case', 'barrel', 'pack']
+const UNIT_OPTIONS = ['%', 'Box', 'piece', 'pair', 'kg', 'L', 'pcs', 'set', 'roll', 'bag', 'bottle', 'case', 'barrel', 'pack']
 
 // ── helper: build rows for one inspection record (all items, rooms stacked) ──
 function buildRecordRows(rec, includeHeader = true) {
