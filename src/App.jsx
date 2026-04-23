@@ -16,13 +16,13 @@ import Profile from './screens/Profile'
 import EquipmentInventory from './screens/EquipmentInventory'
 import EquipmentHub from './screens/EquipmentHub'
 import BookingEquipment from './screens/BookingEquipment'
+import PM from './screens/PM'
 import Toast from './components/Toast'
 
 export default function App() {
   const { session, screen, refreshCache, setScreen } = useAppStore()
   const [loading, setLoading] = useState(true)
-
-  const [userAccess, setUserAccess] = useState(null) // null = all access
+  const [userAccess, setUserAccess] = useState(null)
 
   useEffect(() => {
     refreshCache().finally(() => setLoading(false))
@@ -33,25 +33,24 @@ export default function App() {
       sb.from('user_screen_access').select('screen_key').eq('user_id', session.userId)
         .then(({ data }) => {
           if (data?.length) setUserAccess(new Set(data.map(r => r.screen_key)))
-          else setUserAccess(null) // no restrictions = all access
+          else setUserAccess(null)
         })
     } else {
       setUserAccess(null)
     }
   }, [session?.userId])
 
-  // On login, always start at dashboard
   useEffect(() => {
     if (session && screen === 'home') setScreen('dashboard')
   }, [session])
 
-  // Redirect students away from restricted screens
   useEffect(() => {
     if (session?.role === 'student') {
       const allowed = ['dashboard', 'projects', 'project-detail', 'training', 'profile', 'equipmenthub', 'booking', 'remessages']
       if (!allowed.includes(screen)) setScreen('dashboard')
     }
-    // Redirect staff/admin if they don't have access to a screen
+    // pm is only for admin and user (staff)
+    if (screen === 'pm' && session?.role === 'student') setScreen('dashboard')
     if ((session?.role === 'user' || session?.role === 'admin') && userAccess && screen !== 'dashboard' && screen !== 'profile') {
       if (!userAccess.has(screen)) setScreen('dashboard')
     }
@@ -80,6 +79,7 @@ export default function App() {
     equipmenthub: <EquipmentHub />,
     booking: <BookingEquipment />,
     remessages: <REMessages />,
+    pm: <PM />,
   }
 
   return (
