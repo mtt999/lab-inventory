@@ -5,12 +5,8 @@ import { useAppStore } from '../store/useAppStore'
 const BLUE = '#0d47a1'
 const ORANGE = '#ff6b00'
 const ORANGE_LIGHT = '#fff3e0'
-
 const isDesktop = () => window.innerWidth >= 768
 
-// ══════════════════════════════════════════════════════════════
-// PROGRESS CIRCLE
-// ══════════════════════════════════════════════════════════════
 function ProgressCircle({ progress, onChange }) {
   const size = 36, stroke = 3
   const radius = (size - stroke) / 2
@@ -34,39 +30,27 @@ function ProgressCircle({ progress, onChange }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// MINI CALENDAR
-// ══════════════════════════════════════════════════════════════
 function MiniCalendar({ tasks, onDayClick }) {
-  const [cal, setCal] = useState(() => {
-    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }
-  })
-
+  const [cal, setCal] = useState(() => { const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() } })
   const today = new Date()
   const firstDay = new Date(cal.year, cal.month, 1).getDay()
   const daysInMonth = new Date(cal.year, cal.month + 1, 0).getDate()
   const monthName = new Date(cal.year, cal.month).toLocaleString('default', { month: 'long', year: 'numeric' })
-
   const tasksByDay = {}
   tasks.forEach(t => {
     if (!t.deadline) return
     const d = new Date(t.deadline + 'T12:00:00')
     if (d.getFullYear() === cal.year && d.getMonth() === cal.month) {
-      const key = d.getDate()
-      tasksByDay[key] = (tasksByDay[key] || 0) + 1
+      const key = d.getDate(); tasksByDay[key] = (tasksByDay[key] || 0) + 1
     }
   })
-
   const prev = () => setCal(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { ...c, month: c.month - 1 })
   const next = () => setCal(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { ...c, month: c.month + 1 })
   const isToday = (d) => d === today.getDate() && cal.month === today.getMonth() && cal.year === today.getFullYear()
-
   const cells = []
   for (let i = 0; i < firstDay; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
-
   const DOW = ['Su','Mo','Tu','We','Th','Fr','Sa']
-
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, userSelect: 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -75,9 +59,7 @@ function MiniCalendar({ tasks, onDayClick }) {
         <button onClick={next} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text2)', padding: '0 4px' }}>›</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
-        {DOW.map(d => (
-          <div key={d} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text3)', fontWeight: 500 }}>{d}</div>
-        ))}
+        {DOW.map(d => <div key={d} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text3)', fontWeight: 500 }}>{d}</div>)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
         {cells.map((d, i) => {
@@ -86,18 +68,11 @@ function MiniCalendar({ tasks, onDayClick }) {
           const today_ = isToday(d)
           return (
             <div key={d} onClick={() => count > 0 && onDayClick(cal.year, cal.month, d)}
-              style={{
-                textAlign: 'center', borderRadius: 6, padding: '3px 0', cursor: count > 0 ? 'pointer' : 'default',
-                background: today_ ? BLUE : 'transparent',
-                border: count > 0 && !today_ ? `1px solid ${ORANGE}` : '1px solid transparent',
-                transition: 'background 0.15s', position: 'relative'
-              }}
+              style={{ textAlign: 'center', borderRadius: 6, padding: '3px 0', cursor: count > 0 ? 'pointer' : 'default', background: today_ ? BLUE : 'transparent', border: count > 0 && !today_ ? `1px solid ${ORANGE}` : '1px solid transparent', transition: 'background 0.15s' }}
               onMouseEnter={e => { if (count > 0 && !today_) e.currentTarget.style.background = ORANGE_LIGHT }}
               onMouseLeave={e => { if (!today_) e.currentTarget.style.background = 'transparent' }}>
               <div style={{ fontSize: 11, fontWeight: today_ ? 700 : 400, color: today_ ? 'white' : 'var(--text)' }}>{d}</div>
-              {count > 0 && (
-                <div style={{ width: 14, height: 14, borderRadius: '50%', background: today_ ? 'white' : ORANGE, color: today_ ? BLUE : 'white', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '1px auto 0' }}>{count}</div>
-              )}
+              {count > 0 && <div style={{ width: 14, height: 14, borderRadius: '50%', background: today_ ? 'white' : ORANGE, color: today_ ? BLUE : 'white', fontSize: 8, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '1px auto 0' }}>{count}</div>}
             </div>
           )
         })}
@@ -110,7 +85,7 @@ function MiniCalendar({ tasks, onDayClick }) {
 // ══════════════════════════════════════════════════════════════
 // MY TASKS TAB
 // ══════════════════════════════════════════════════════════════
-function MyTasks({ userId, isAdmin }) {
+function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedTask, setSelectedTask] = useState(null)
@@ -127,11 +102,16 @@ function MyTasks({ userId, isAdmin }) {
     return () => window.removeEventListener('resize', handler)
   }, [])
 
-  useEffect(() => { load() }, [userId])
+  useEffect(() => { load() }, [userId, isOwnerAdmin])
 
   async function load() {
     try {
-      const { data, error } = await sb.from('tasks').select('*').eq('assigned_to', userId).order('deadline', { ascending: true })
+      let query = sb.from('tasks').select('*').order('deadline', { ascending: true, nullsFirst: false })
+      // owner admin (userId=null) sees ALL tasks; regular users see their own
+      if (!isOwnerAdmin && userId) {
+        query = query.or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
+      }
+      const { data, error } = await query
       if (error) console.error('Load tasks error:', error)
       setTasks(data || [])
     } catch(e) { console.error(e) }
@@ -152,56 +132,47 @@ function MyTasks({ userId, isAdmin }) {
     if (selectedTask?.id === task.id) setSelectedTask({ ...selectedTask, progress: val })
   }
 
-  // ── Add task with full error handling ──
   const addTask = async () => {
     if (!newTask.title.trim()) { toast('Please enter a task title.'); return }
     setSaving(true)
     try {
-      const { data, error } = await sb.from('tasks').insert({
+      const payload = {
         title: newTask.title,
-        assigned_to: userId,
-        created_by: userId,
         start_date: newTask.start_date || null,
         deadline: newTask.deadline || null,
         notes: newTask.notes || '',
-        status: 'todo',
-        progress: 0,
-        is_meeting_task: false,
-      }).select().single()
-
+        status: 'todo', progress: 0, is_meeting_task: false,
+      }
+      if (userId) { payload.assigned_to = userId; payload.created_by = userId }
+      const { data, error } = await sb.from('tasks').insert(payload).select().single()
       if (error) throw error
       if (data) setTasks(prev => [...prev, data])
       setNewTask({ title: '', start_date: '', deadline: '', notes: '' })
-      setShowAddTask(false)
-      toast('Task added!')
+      setShowAddTask(false); toast('Task added!')
     } catch (err) {
       console.error('Add task failed:', err)
-      toast('Could not add task: ' + (err?.message || 'Check the tasks table exists in Supabase'))
+      toast('Could not add task: ' + (err?.message || 'Check tasks table in Supabase'))
     }
     setSaving(false)
   }
 
   const done = tasks.filter(t => t.status === 'done').length
   const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0
-
   const statusStyle = (s) => ({
     todo:        { background: '#f1f1f1', color: '#555' },
     in_progress: { background: ORANGE_LIGHT, color: ORANGE },
     done:        { background: '#e8f5e9', color: '#2e7d32' },
   }[s] || {})
-
-  const tasksOnDay = (year, month, day) =>
-    tasks.filter(t => {
-      if (!t.deadline) return false
-      const d = new Date(t.deadline + 'T12:00:00')
-      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day
-    })
+  const tasksOnDay = (year, month, day) => tasks.filter(t => {
+    if (!t.deadline) return false
+    const d = new Date(t.deadline + 'T12:00:00')
+    return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day
+  })
 
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
 
   return (
     <div>
-
       {/* Task detail modal */}
       {selectedTask && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
@@ -331,14 +302,13 @@ function MyTasks({ userId, isAdmin }) {
         <div style={{ height: '100%', width: `${pct}%`, background: BLUE, borderRadius: 99 }} />
       </div>
 
-      {/* Desktop: 2-col; Mobile: stacked */}
+      {/* 2-col desktop / stacked mobile */}
       <div style={{ display: desktop ? 'grid' : 'block', gridTemplateColumns: desktop ? '1fr 220px' : undefined, gap: 20 }}>
-
         <div>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
             {tasks.length === 0
               ? <div style={{ padding: 24, color: 'var(--text3)', fontSize: 14, textAlign: 'center' }}>
-                  No tasks assigned yet.{isAdmin && <span onClick={() => setShowAddTask(true)} style={{ color: BLUE, cursor: 'pointer', marginLeft: 6 }}>Add one →</span>}
+                  No tasks yet.{isAdmin && <span onClick={() => setShowAddTask(true)} style={{ color: BLUE, cursor: 'pointer', marginLeft: 6 }}>Add one →</span>}
                 </div>
               : tasks.map(task => (
                 <div key={task.id} onClick={() => setSelectedTask(task)}
@@ -362,12 +332,10 @@ function MyTasks({ userId, isAdmin }) {
           </div>
           <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>Click a task to view details · Click circle to update progress</div>
         </div>
-
         <div style={{ marginTop: desktop ? 0 : 20 }}>
           <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Deadline calendar</div>
           <MiniCalendar tasks={tasks} onDayClick={(y, m, d) => setCalDayPopup({ year: y, month: m, day: d })} />
         </div>
-
       </div>
     </div>
   )
@@ -380,25 +348,18 @@ function Team() {
   const [users, setUsers] = useState([])
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
-
   useEffect(() => {
     Promise.all([
       sb.from('profiles').select('*').order('role', { ascending: true }),
       sb.from('tasks').select('*')
-    ]).then(([{ data: p }, { data: t }]) => {
-      setUsers(p || []); setTasks(t || []); setLoading(false)
-    })
+    ]).then(([{ data: p }, { data: t }]) => { setUsers(p || []); setTasks(t || []); setLoading(false) })
   }, [])
-
   const userTasks = (uid) => tasks.filter(t => t.assigned_to === uid)
   const doneTasks = (uid) => tasks.filter(t => t.assigned_to === uid && t.status === 'done').length
   const pct = (uid) => { const tot = userTasks(uid).length; return tot ? Math.round((doneTasks(uid) / tot) * 100) : 0 }
-
   const dotColor = (s) => ({ todo: '#aaa', in_progress: ORANGE, done: '#2e7d32' }[s] || '#aaa')
   const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
-
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {users.map(user => (
@@ -448,7 +409,6 @@ function Meetings({ userId, isAdmin }) {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const { toast } = useAppStore()
-
   useEffect(() => {
     Promise.all([
       sb.from('meetings').select('*').order('date', { ascending: false }),
@@ -461,37 +421,35 @@ function Meetings({ userId, isAdmin }) {
       setLoading(false)
     })
   }, [])
-
   const createMeeting = async () => {
-    const { data } = await sb.from('meetings').insert({ date: new Date().toISOString().split('T')[0], created_by: userId, notes: '' }).select().single()
-    setMeetings([data, ...meetings]); setActiveMeeting(data); setNotes('')
+    const payload = { date: new Date().toISOString().split('T')[0], notes: '' }
+    if (userId) payload.created_by = userId
+    const { data } = await sb.from('meetings').insert(payload).select().single()
+    if (data) { setMeetings([data, ...meetings]); setActiveMeeting(data); setNotes('') }
   }
-
   const saveNotes = async () => {
     setSaving(true)
     await sb.from('meetings').update({ notes }).eq('id', activeMeeting.id)
     setMeetings(meetings.map(m => m.id === activeMeeting.id ? { ...m, notes } : m))
     setSaving(false); toast('Notes saved!')
   }
-
   const addTask = async (e) => {
     e.preventDefault()
-    const { data } = await sb.from('tasks').insert({ ...newTask, created_by: userId, meeting_id: activeMeeting.id, is_meeting_task: true, status: 'todo' }).select().single()
-    setTasks([...tasks, data]); setNewTask({ title: '', assigned_to: '', start_date: '', deadline: '' }); setShowNewTask(false)
+    const payload = { ...newTask, meeting_id: activeMeeting.id, is_meeting_task: true, status: 'todo' }
+    if (userId) payload.created_by = userId
+    const { data } = await sb.from('tasks').insert(payload).select().single()
+    if (data) setTasks([...tasks, data])
+    setNewTask({ title: '', assigned_to: '', start_date: '', deadline: '' }); setShowNewTask(false)
   }
-
   const toggleStatus = async (task) => {
     const next = { todo: 'in_progress', in_progress: 'done', done: 'todo' }
     const newStatus = next[task.status]
     await sb.from('tasks').update({ status: newStatus }).eq('id', task.id)
     setTasks(tasks.map(t => t.id === task.id ? { ...t, status: newStatus } : t))
   }
-
   const meetingTasks = (mid) => tasks.filter(t => t.meeting_id === mid)
   const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
-
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-
   return (
     <div style={{ display: 'flex', gap: 20 }}>
       <div style={{ width: 160, flexShrink: 0 }}>
@@ -509,62 +467,56 @@ function Meetings({ userId, isAdmin }) {
           ))}
         </div>
       </div>
-
       <div style={{ flex: 1 }}>
-        {!activeMeeting
-          ? <div style={{ fontSize: 14, color: 'var(--text3)' }}>Select or create a meeting.</div>
-          : (
-            <>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                <div style={{ fontWeight: 600, fontSize: 15 }}>{new Date(activeMeeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
-                {isAdmin && <button className="btn btn-sm btn-primary" onClick={() => setShowNewTask(!showNewTask)}>+ Add task</button>}
-              </div>
-              {showNewTask && (
-                <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                  <div className="field"><label>Task title</label><input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Task title" required /></div>
-                  <div className="field"><label>Assign to</label>
-                    <select value={newTask.assigned_to} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })} required>
-                      <option value="">Assign to...</option>
-                      {Object.values(profiles).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid-2">
-                    <div className="field"><label>Start date</label><input type="date" value={newTask.start_date} onChange={e => setNewTask({ ...newTask, start_date: e.target.value })} required /></div>
-                    <div className="field"><label>Deadline</label><input type="date" value={newTask.deadline} onChange={e => setNewTask({ ...newTask, deadline: e.target.value })} required /></div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button className="btn btn-primary" onClick={addTask}>Add task</button>
-                    <button className="btn" onClick={() => setShowNewTask(false)}>Cancel</button>
-                  </div>
+        {!activeMeeting ? <div style={{ fontSize: 14, color: 'var(--text3)' }}>Select or create a meeting.</div> : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>{new Date(activeMeeting.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</div>
+              {isAdmin && <button className="btn btn-sm btn-primary" onClick={() => setShowNewTask(!showNewTask)}>+ Add task</button>}
+            </div>
+            {showNewTask && (
+              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+                <div className="field"><label>Task title</label><input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Task title" required /></div>
+                <div className="field"><label>Assign to</label>
+                  <select value={newTask.assigned_to} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })} required>
+                    <option value="">Assign to...</option>
+                    {Object.values(profiles).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
                 </div>
-              )}
-              <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
-                {meetingTasks(activeMeeting.id).length === 0
-                  ? <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No tasks for this meeting yet.</div>
-                  : meetingTasks(activeMeeting.id).map(task => (
-                    <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--surface2)' }}>
-                      <button onClick={() => toggleStatus(task)}
-                        style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${task.status === 'done' ? '#2e7d32' : 'var(--border)'}`, background: task.status === 'done' ? '#2e7d32' : 'transparent', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {task.status === 'done' && <span style={{ color: 'white', fontSize: 11, fontWeight: 700 }}>✓</span>}
-                      </button>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 13, color: task.status === 'done' ? 'var(--text3)' : 'var(--text)', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>{task.title}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text3)' }}>{profiles[task.assigned_to]?.name} · {task.start_date} → {task.deadline}</div>
-                      </div>
-                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 500, ...statusStyle(task.status) }}>{task.status.replace('_', ' ')}</span>
+                <div className="grid-2">
+                  <div className="field"><label>Start date</label><input type="date" value={newTask.start_date} onChange={e => setNewTask({ ...newTask, start_date: e.target.value })} required /></div>
+                  <div className="field"><label>Deadline</label><input type="date" value={newTask.deadline} onChange={e => setNewTask({ ...newTask, deadline: e.target.value })} required /></div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-primary" onClick={addTask}>Add task</button>
+                  <button className="btn" onClick={() => setShowNewTask(false)}>Cancel</button>
+                </div>
+              </div>
+            )}
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
+              {meetingTasks(activeMeeting.id).length === 0
+                ? <div style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text3)' }}>No tasks for this meeting yet.</div>
+                : meetingTasks(activeMeeting.id).map(task => (
+                  <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--surface2)' }}>
+                    <button onClick={() => toggleStatus(task)} style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${task.status === 'done' ? '#2e7d32' : 'var(--border)'}`, background: task.status === 'done' ? '#2e7d32' : 'transparent', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {task.status === 'done' && <span style={{ color: 'white', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                    </button>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, color: task.status === 'done' ? 'var(--text3)' : 'var(--text)', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>{task.title}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{profiles[task.assigned_to]?.name} · {task.start_date} → {task.deadline}</div>
                     </div>
-                  ))
-                }
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Meeting notes</div>
-                <textarea rows={4} style={{ resize: 'vertical', width: '100%', boxSizing: 'border-box' }}
-                  value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes for this meeting..." />
-                <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={saveNotes} disabled={saving}>{saving ? 'Saving…' : 'Save notes'}</button>
-              </div>
-            </>
-          )
-        }
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 500, ...statusStyle(task.status) }}>{task.status.replace('_', ' ')}</span>
+                  </div>
+                ))
+              }
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Meeting notes</div>
+              <textarea rows={4} style={{ resize: 'vertical', width: '100%', boxSizing: 'border-box' }} value={notes} onChange={e => setNotes(e.target.value)} placeholder="Add notes for this meeting..." />
+              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={saveNotes} disabled={saving}>{saving ? 'Saving…' : 'Save notes'}</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -580,23 +532,19 @@ function PMAdmin({ userId }) {
   const [newTask, setNewTask] = useState({ title: '', assigned_to: '', start_date: '', deadline: '', is_meeting_task: false })
   const [saving, setSaving] = useState(false)
   const { toast } = useAppStore()
-
   useEffect(() => {
     Promise.all([
       sb.from('profiles').select('*'),
       sb.from('tasks').select('*').order('created_at', { ascending: false })
-    ]).then(([{ data: p }, { data: t }]) => {
-      setProfiles(p || []); setTasks(t || []); setLoading(false)
-    })
+    ]).then(([{ data: p }, { data: t }]) => { setProfiles(p || []); setTasks(t || []); setLoading(false) })
   }, [])
-
-  const profileMap = {}
-  profiles.forEach(p => profileMap[p.id] = p)
-
+  const profileMap = {}; profiles.forEach(p => profileMap[p.id] = p)
   const createTask = async (e) => {
     e.preventDefault(); setSaving(true)
     try {
-      const { data, error } = await sb.from('tasks').insert({ ...newTask, created_by: userId, status: 'todo' }).select().single()
+      const payload = { ...newTask, status: 'todo' }
+      if (userId) payload.created_by = userId
+      const { data, error } = await sb.from('tasks').insert(payload).select().single()
       if (error) throw error
       if (data) setTasks([data, ...tasks])
       setNewTask({ title: '', assigned_to: '', start_date: '', deadline: '', is_meeting_task: false })
@@ -604,17 +552,13 @@ function PMAdmin({ userId }) {
     } catch(err) { toast('Error: ' + (err?.message || 'Could not create task')) }
     setSaving(false)
   }
-
   const deleteTask = async (id) => {
     if (!confirm('Delete this task?')) return
     await sb.from('tasks').delete().eq('id', id)
     setTasks(tasks.filter(t => t.id !== id)); toast('Task deleted.')
   }
-
   const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
-
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 20 }}>
@@ -666,7 +610,6 @@ function Chat({ userId }) {
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef(null)
-
   useEffect(() => {
     Promise.all([
       sb.from('profiles').select('*'),
@@ -675,27 +618,23 @@ function Chat({ userId }) {
       const map = {}; (p || []).forEach(pr => map[pr.id] = pr)
       setProfiles(map); setMessages(m || []); setLoading(false)
     })
-
     const channel = sb.channel('pm_messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         setMessages(prev => [...prev, payload.new])
       }).subscribe()
     return () => sb.removeChannel(channel)
   }, [])
-
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
-
   const sendMessage = async (e) => {
     e.preventDefault()
     if (!newMessage.trim()) return
-    await sb.from('messages').insert({ sender_id: userId, body: newMessage.trim() })
+    const payload = { body: newMessage.trim() }
+    if (userId) payload.sender_id = userId
+    await sb.from('messages').insert(payload)
     setNewMessage('')
   }
-
   const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 500 }}>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
@@ -706,7 +645,7 @@ function Chat({ userId }) {
           return (
             <div key={msg.id} style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexDirection: isMe ? 'row-reverse' : 'row' }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: sender?.role === 'admin' ? '#e8f0fe' : ORANGE_LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: sender?.role === 'admin' ? BLUE : ORANGE, flexShrink: 0 }}>
-                {sender?.name?.slice(0, 2).toUpperCase()}
+                {sender?.name?.slice(0, 2).toUpperCase() || 'A'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 2, maxWidth: '70%' }}>
                 {!isMe && <span style={{ fontSize: 11, color: 'var(--text3)', paddingLeft: 4 }}>{sender?.name}</span>}
@@ -735,7 +674,8 @@ export default function PM() {
   const { session } = useAppStore()
   const [activeTab, setActiveTab] = useState('tasks')
 
-  const userId = session?.userId
+  const userId = session?.userId        // null for owner admin
+  const isOwnerAdmin = !userId          // owner admin has no userId
   const isAdmin = session?.role === 'admin' || session?.role === 'user'
 
   const tabs = [
@@ -754,7 +694,6 @@ export default function PM() {
           <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>ICT — Staff workspace</div>
         </div>
       </div>
-
       <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
@@ -763,8 +702,7 @@ export default function PM() {
           </button>
         ))}
       </div>
-
-      {activeTab === 'tasks'    && <MyTasks userId={userId} isAdmin={isAdmin} />}
+      {activeTab === 'tasks'    && <MyTasks userId={userId} isAdmin={isAdmin} isOwnerAdmin={isOwnerAdmin} />}
       {activeTab === 'team'     && <Team />}
       {activeTab === 'meetings' && <Meetings userId={userId} isAdmin={session?.role === 'admin'} />}
       {activeTab === 'chat'     && <Chat userId={userId} />}
