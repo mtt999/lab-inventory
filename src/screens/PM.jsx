@@ -2,10 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
 
-// ── iLab theme colors ──
 const BLUE = '#0d47a1'
 const ORANGE = '#ff6b00'
 const ORANGE_LIGHT = '#fff3e0'
+
+// detect desktop vs mobile
+const isDesktop = () => window.innerWidth >= 768
 
 // ══════════════════════════════════════════════════════════════
 // PROGRESS CIRCLE
@@ -34,17 +36,125 @@ function ProgressCircle({ progress, onChange }) {
 }
 
 // ══════════════════════════════════════════════════════════════
+// MINI CALENDAR
+// ══════════════════════════════════════════════════════════════
+function MiniCalendar({ tasks, onDayClick }) {
+  const [cal, setCal] = useState(() => {
+    const n = new Date(); return { year: n.getFullYear(), month: n.getMonth() }
+  })
+
+  const today = new Date()
+  const firstDay = new Date(cal.year, cal.month, 1).getDay()
+  const daysInMonth = new Date(cal.year, cal.month + 1, 0).getDate()
+  const monthName = new Date(cal.year, cal.month).toLocaleString('default', { month: 'long', year: 'numeric' })
+
+  // count tasks due on each day
+  const tasksByDay = {}
+  tasks.forEach(t => {
+    if (!t.deadline) return
+    const d = new Date(t.deadline)
+    if (d.getFullYear() === cal.year && d.getMonth() === cal.month) {
+      const key = d.getDate()
+      tasksByDay[key] = (tasksByDay[key] || 0) + 1
+    }
+  })
+
+  const prev = () => setCal(c => c.month === 0 ? { year: c.year - 1, month: 11 } : { ...c, month: c.month - 1 })
+  const next = () => setCal(c => c.month === 11 ? { year: c.year + 1, month: 0 } : { ...c, month: c.month + 1 })
+
+  const isToday = (d) => d === today.getDate() && cal.month === today.getMonth() && cal.year === today.getFullYear()
+
+  const cells = []
+  for (let i = 0; i < firstDay; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  const DOW = ['Su','Mo','Tu','We','Th','Fr','Sa']
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 14, userSelect: 'none' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <button onClick={prev} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text2)', padding: '0 4px' }}>‹</button>
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{monthName}</div>
+        <button onClick={next} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text2)', padding: '0 4px' }}>›</button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 4 }}>
+        {DOW.map(d => (
+          <div key={d} style={{ textAlign: 'center', fontSize: 10, color: 'var(--text3)', fontWeight: 500 }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Day cells */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2 }}>
+        {cells.map((d, i) => {
+          if (!d) return <div key={`e${i}`} />
+          const count = tasksByDay[d] || 0
+          const today_ = isToday(d)
+          return (
+            <div key={d} onClick={() => count > 0 && onDayClick(cal.year, cal.month, d)}
+              style={{
+                textAlign: 'center', borderRadius: 6, padding: '3px 0', cursor: count > 0 ? 'pointer' : 'default',
+                background: today_ ? BLUE : 'transparent',
+                border: count > 0 && !today_ ? `1px solid ${ORANGE}` : '1px solid transparent',
+                transition: 'background 0.15s',
+                position: 'relative'
+              }}
+              onMouseEnter={e => { if (count > 0 && !today_) e.currentTarget.style.background = ORANGE_LIGHT }}
+              onMouseLeave={e => { if (!today_) e.currentTarget.style.background = 'transparent' }}>
+              <div style={{ fontSize: 11, fontWeight: today_ ? 700 : 400, color: today_ ? 'white' : 'var(--text)' }}>{d}</div>
+              {count > 0 && (
+                <div style={{
+                  width: 14, height: 14, borderRadius: '50%',
+                  background: today_ ? 'white' : ORANGE,
+                  color: today_ ? BLUE : 'white',
+                  fontSize: 8, fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  margin: '1px auto 0'
+                }}>{count}</div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <div style={{ fontSize: 10, color: 'var(--text3)', marginTop: 8, textAlign: 'center' }}>
+        Highlighted days have tasks due
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
 // MY TASKS TAB
 // ══════════════════════════════════════════════════════════════
-function MyTasks({ userId }) {
+function MyTasks({ userId, isAdmin }) {
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedTask, setSelectedTask] = useState(null)
+  const [calDayPopup, setCalDayPopup] = useState(null) // { year, month, day }
+  const [desktop, setDesktop] = useState(isDesktop())
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTask, setNewTask] = useState({ title: '', start_date: '', deadline: '', notes: '' })
+  const [saving, setSaving] = useState(false)
+  const { toast } = useAppStore()
 
   useEffect(() => {
-    sb.from('tasks').select('*').eq('assigned_to', userId).order('created_at', { ascending: true })
-      .then(({ data }) => { setTasks(data || []); setLoading(false) })
+    const handler = () => setDesktop(isDesktop())
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  useEffect(() => {
+    load()
   }, [userId])
+
+  async function load() {
+    const { data } = await sb.from('tasks').select('*').eq('assigned_to', userId).order('deadline', { ascending: true })
+    setTasks(data || [])
+    setLoading(false)
+  }
 
   const toggleStatus = async (task, e) => {
     e.stopPropagation()
@@ -60,19 +170,50 @@ function MyTasks({ userId }) {
     if (selectedTask?.id === task.id) setSelectedTask({ ...selectedTask, progress: val })
   }
 
+  const addTask = async () => {
+    if (!newTask.title.trim()) { toast('Please enter a task title.'); return }
+    setSaving(true)
+    const { data } = await sb.from('tasks').insert({
+      title: newTask.title,
+      assigned_to: userId,
+      created_by: userId,
+      start_date: newTask.start_date || null,
+      deadline: newTask.deadline || null,
+      notes: newTask.notes || '',
+      status: 'todo',
+      progress: 0,
+      is_meeting_task: false,
+    }).select().single()
+    setTasks([...tasks, data])
+    setNewTask({ title: '', start_date: '', deadline: '', notes: '' })
+    setShowAddTask(false)
+    setSaving(false)
+    toast('Task added!')
+  }
+
   const done = tasks.filter(t => t.status === 'done').length
   const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0
 
   const statusStyle = (s) => ({
-    todo: { background: '#f1f1f1', color: '#555' },
+    todo:        { background: '#f1f1f1', color: '#555' },
     in_progress: { background: ORANGE_LIGHT, color: ORANGE },
-    done: { background: '#e8f5e9', color: '#2e7d32' },
+    done:        { background: '#e8f5e9', color: '#2e7d32' },
   }[s] || {})
+
+  // tasks due on a specific day for the calendar popup
+  const tasksOnDay = (year, month, day) =>
+    tasks.filter(t => {
+      if (!t.deadline) return false
+      const d = new Date(t.deadline)
+      return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day
+    })
 
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
 
   return (
     <div>
+
+      {/* ── Task detail modal ── */}
       {selectedTask && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', width: '100%', maxWidth: 440, padding: 24 }}>
@@ -117,42 +258,137 @@ function MyTasks({ userId }) {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 20 }}>
-        {[{ label: 'Total tasks', value: tasks.length, color: 'var(--text)' },
-          { label: 'Done', value: done, color: '#2e7d32' },
-          { label: 'Progress', value: `${pct}%`, color: BLUE }].map(s => (
-          <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '14px 16px' }}>
-            <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 4 }}>{s.label}</div>
-            <div style={{ fontSize: 24, fontWeight: 600, color: s.color }}>{s.value}</div>
+      {/* ── Calendar day popup ── */}
+      {calDayPopup && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', width: '100%', maxWidth: 420, padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 15 }}>
+                Tasks due on {new Date(calDayPopup.year, calDayPopup.month, calDayPopup.day).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+              </div>
+              <button onClick={() => setCalDayPopup(null)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text3)' }}>×</button>
+            </div>
+            {tasksOnDay(calDayPopup.year, calDayPopup.month, calDayPopup.day).map(task => (
+              <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--surface2)' }}>
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: task.status === 'done' ? '#2e7d32' : task.status === 'in_progress' ? ORANGE : '#aaa', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, textDecoration: task.status === 'done' ? 'line-through' : 'none', color: task.status === 'done' ? 'var(--text3)' : 'var(--text)' }}>{task.title}</div>
+                  {desktop && task.notes && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>{task.notes}</div>}
+                </div>
+                <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 500, ...statusStyle(task.status) }}>{task.status.replace('_', ' ')}</span>
+                {desktop && <span style={{ fontSize: 11, color: BLUE, fontWeight: 500 }}>{task.progress || 0}%</span>}
+              </div>
+            ))}
+            <button className="btn" style={{ marginTop: 16 }} onClick={() => setCalDayPopup(null)}>Close</button>
           </div>
-        ))}
+        </div>
+      )}
+
+      {/* ── Add task modal (staff/admin) ── */}
+      {showAddTask && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', width: '100%', maxWidth: 420, padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>Add new task</div>
+              <button onClick={() => setShowAddTask(false)} style={{ border: 'none', background: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text3)' }}>×</button>
+            </div>
+            <div className="field"><label>Task title *</label>
+              <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="What needs to be done?" autoFocus />
+            </div>
+            <div className="grid-2">
+              <div className="field"><label>Start date</label>
+                <input type="date" value={newTask.start_date} onChange={e => setNewTask({ ...newTask, start_date: e.target.value })} />
+              </div>
+              <div className="field"><label>Deadline</label>
+                <input type="date" value={newTask.deadline} onChange={e => setNewTask({ ...newTask, deadline: e.target.value })} />
+              </div>
+            </div>
+            <div className="field"><label>Notes</label>
+              <textarea rows={3} style={{ resize: 'vertical' }} value={newTask.notes} onChange={e => setNewTask({ ...newTask, notes: e.target.value })} placeholder="Optional notes…" />
+            </div>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button className="btn btn-primary" onClick={addTask} disabled={saving}>{saving ? 'Adding…' : 'Add task'}</button>
+              <button className="btn" onClick={() => setShowAddTask(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Top bar: stats + add button ── */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {[{ label: 'Total', value: tasks.length, color: 'var(--text)' },
+            { label: 'Done', value: done, color: '#2e7d32' },
+            { label: 'Progress', value: desktop ? `${pct}%` : `${pct}%`, color: BLUE }
+          ].map(s => (
+            <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: desktop ? '10px 16px' : '8px 12px' }}>
+              {desktop && <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 2 }}>{s.label}</div>}
+              <div style={{ fontSize: desktop ? 20 : 16, fontWeight: 600, color: s.color }}>{s.value}</div>
+              {!desktop && <div style={{ fontSize: 9, color: 'var(--text3)' }}>{s.label}</div>}
+            </div>
+          ))}
+        </div>
+        {/* Add task button — staff and admin only */}
+        {isAdmin && (
+          <button className="btn btn-primary" onClick={() => setShowAddTask(true)}
+            style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>+</span>
+            {desktop ? 'Add task' : ''}
+          </button>
+        )}
       </div>
 
+      {/* ── Progress bar ── */}
       <div style={{ height: 4, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ height: '100%', width: `${pct}%`, background: BLUE, borderRadius: 99 }} />
       </div>
 
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-        {tasks.length === 0
-          ? <div style={{ padding: 24, color: 'var(--text3)', fontSize: 14 }}>No tasks assigned yet.</div>
-          : tasks.map(task => (
-            <div key={task.id} onClick={() => setSelectedTask(task)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderBottom: '1px solid var(--surface2)', cursor: 'pointer', transition: 'background 0.15s' }}
-              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <button onClick={e => toggleStatus(task, e)}
-                style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${task.status === 'done' ? '#2e7d32' : 'var(--border)'}`, background: task.status === 'done' ? '#2e7d32' : 'transparent', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {task.status === 'done' && <span style={{ color: 'white', fontSize: 11, fontWeight: 700 }}>✓</span>}
-              </button>
-              <span style={{ flex: 1, fontSize: 14, color: task.status === 'done' ? 'var(--text3)' : 'var(--text)', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>{task.title}</span>
-              {task.notes && <span style={{ fontSize: 12, color: 'var(--text3)' }}>📝</span>}
-              <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 500, ...statusStyle(task.status) }}>{task.status.replace('_', ' ')}</span>
-              <ProgressCircle progress={task.progress || 0} onChange={val => updateProgress(task, val)} />
-            </div>
-          ))
-        }
+      {/* ── Desktop: 2-col layout (task list + calendar); Mobile: stacked ── */}
+      <div style={{ display: desktop ? 'grid' : 'block', gridTemplateColumns: desktop ? '1fr 220px' : undefined, gap: 20 }}>
+
+        {/* Task list */}
+        <div>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            {tasks.length === 0
+              ? <div style={{ padding: 24, color: 'var(--text3)', fontSize: 14, textAlign: 'center' }}>
+                  No tasks assigned yet.{isAdmin && <span onClick={() => setShowAddTask(true)} style={{ color: BLUE, cursor: 'pointer', marginLeft: 6 }}>Add one →</span>}
+                </div>
+              : tasks.map(task => (
+                <div key={task.id} onClick={() => setSelectedTask(task)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--surface2)', cursor: 'pointer', transition: 'background 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                  <button onClick={e => toggleStatus(task, e)}
+                    style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${task.status === 'done' ? '#2e7d32' : 'var(--border)'}`, background: task.status === 'done' ? '#2e7d32' : 'transparent', flexShrink: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {task.status === 'done' && <span style={{ color: 'white', fontSize: 11, fontWeight: 700 }}>✓</span>}
+                  </button>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, color: task.status === 'done' ? 'var(--text3)' : 'var(--text)', textDecoration: task.status === 'done' ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.title}</div>
+                    {desktop && task.deadline && (
+                      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 2 }}>Due {task.deadline}</div>
+                    )}
+                  </div>
+                  {task.notes && <span style={{ fontSize: 12, color: 'var(--text3)', flexShrink: 0 }}>📝</span>}
+                  {desktop && (
+                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 500, flexShrink: 0, ...statusStyle(task.status) }}>{task.status.replace('_', ' ')}</span>
+                  )}
+                  <ProgressCircle progress={task.progress || 0} onChange={val => updateProgress(task, val)} />
+                </div>
+              ))
+            }
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>
+            Click a task to view details · Click circle to update progress
+          </div>
+        </div>
+
+        {/* Calendar — shown on desktop inline, on mobile below */}
+        <div style={{ marginTop: desktop ? 0 : 20 }}>
+          <div style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Deadline calendar</div>
+          <MiniCalendar tasks={tasks} onDayClick={(y, m, d) => setCalDayPopup({ year: y, month: m, day: d })} />
+        </div>
+
       </div>
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>Click a task to open · Click circle to update progress</div>
     </div>
   )
 }
@@ -518,24 +754,16 @@ function Chat({ userId }) {
 export default function PM() {
   const { session } = useAppStore()
   const [activeTab, setActiveTab] = useState('tasks')
-  const [profile, setProfile] = useState(null)
 
   const userId = session?.userId
-  const isAdmin = session?.role === 'admin'
-
-  useEffect(() => {
-    if (userId) {
-      sb.from('profiles').select('*').eq('id', userId).maybeSingle()
-        .then(({ data }) => setProfile(data))
-    }
-  }, [userId])
+  const isAdmin = session?.role === 'admin' || session?.role === 'user'
 
   const tabs = [
     { key: 'tasks',    label: 'My Tasks' },
     { key: 'team',     label: 'Team' },
     { key: 'meetings', label: 'Meetings' },
     { key: 'chat',     label: 'Chat' },
-    ...(isAdmin ? [{ key: 'admin', label: 'Admin' }] : [])
+    ...(session?.role === 'admin' ? [{ key: 'admin', label: 'Admin' }] : [])
   ]
 
   return (
@@ -556,11 +784,11 @@ export default function PM() {
         ))}
       </div>
 
-      {activeTab === 'tasks'    && <MyTasks userId={userId} />}
+      {activeTab === 'tasks'    && <MyTasks userId={userId} isAdmin={isAdmin} />}
       {activeTab === 'team'     && <Team />}
-      {activeTab === 'meetings' && <Meetings userId={userId} isAdmin={isAdmin} />}
+      {activeTab === 'meetings' && <Meetings userId={userId} isAdmin={session?.role === 'admin'} />}
       {activeTab === 'chat'     && <Chat userId={userId} />}
-      {activeTab === 'admin'    && isAdmin && <PMAdmin userId={userId} />}
+      {activeTab === 'admin'    && session?.role === 'admin' && <PMAdmin userId={userId} />}
     </div>
   )
 }
