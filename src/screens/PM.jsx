@@ -107,7 +107,6 @@ function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
   async function load() {
     try {
       let query = sb.from('tasks').select('*').order('deadline', { ascending: true, nullsFirst: false })
-      // owner admin (userId=null) sees ALL tasks; regular users see their own
       if (!isOwnerAdmin && userId) {
         query = query.or(`assigned_to.eq.${userId},created_by.eq.${userId}`)
       }
@@ -173,7 +172,6 @@ function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
 
   return (
     <div>
-      {/* Task detail modal */}
       {selectedTask && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', width: '100%', maxWidth: 440, padding: 24 }}>
@@ -218,7 +216,6 @@ function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
         </div>
       )}
 
-      {/* Calendar day popup */}
       {calDayPopup && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', width: '100%', maxWidth: 420, padding: 24 }}>
@@ -244,7 +241,6 @@ function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
         </div>
       )}
 
-      {/* Add task modal */}
       {showAddTask && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: 'var(--surface)', borderRadius: 16, border: '1px solid var(--border)', width: '100%', maxWidth: 420, padding: 24 }}>
@@ -274,7 +270,6 @@ function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
         </div>
       )}
 
-      {/* Top bar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 10 }}>
           {[{ label: 'Total', value: tasks.length, color: 'var(--text)' },
@@ -297,12 +292,10 @@ function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
         )}
       </div>
 
-      {/* Progress bar */}
       <div style={{ height: 4, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden', marginBottom: 20 }}>
         <div style={{ height: '100%', width: `${pct}%`, background: BLUE, borderRadius: 99 }} />
       </div>
 
-      {/* 2-col desktop / stacked mobile */}
       <div style={{ display: desktop ? 'grid' : 'block', gridTemplateColumns: desktop ? '1fr 220px' : undefined, gap: 20 }}>
         <div>
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
@@ -345,32 +338,43 @@ function MyTasks({ userId, isAdmin, isOwnerAdmin }) {
 // TEAM TAB
 // ══════════════════════════════════════════════════════════════
 function Team() {
-  const [users, setUsers] = useState([])
+  const [staffUsers, setStaffUsers] = useState([])
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
+
   useEffect(() => {
     Promise.all([
-      sb.from('profiles').select('*').order('role', { ascending: true }),
+      sb.from('users').select('id, name, role').eq('role', 'user').eq('is_active', true).order('name'),
       sb.from('tasks').select('*')
-    ]).then(([{ data: p }, { data: t }]) => { setUsers(p || []); setTasks(t || []); setLoading(false) })
+    ]).then(([{ data: u }, { data: t }]) => {
+      setStaffUsers(u || []); setTasks(t || []); setLoading(false)
+    })
   }, [])
+
   const userTasks = (uid) => tasks.filter(t => t.assigned_to === uid)
   const doneTasks = (uid) => tasks.filter(t => t.assigned_to === uid && t.status === 'done').length
   const pct = (uid) => { const tot = userTasks(uid).length; return tot ? Math.round((doneTasks(uid) / tot) * 100) : 0 }
   const dotColor = (s) => ({ todo: '#aaa', in_progress: ORANGE, done: '#2e7d32' }[s] || '#aaa')
   const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
+
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+  if (staffUsers.length === 0) return (
+    <div style={{ padding: 32, textAlign: 'center', color: 'var(--text3)', fontSize: 14 }}>
+      No staff members found. Add staff from Profile → Staff & Access.
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {users.map(user => (
+      {staffUsers.map(user => (
         <div key={user.id} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--surface2)' }}>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', background: user.role === 'admin' ? '#e8f0fe' : ORANGE_LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 13, color: user.role === 'admin' ? BLUE : ORANGE, flexShrink: 0 }}>
+            <div style={{ width: 36, height: 36, borderRadius: '50%', background: ORANGE_LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 13, color: ORANGE, flexShrink: 0 }}>
               {user.name?.slice(0, 2).toUpperCase()}
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 500, fontSize: 14 }}>{user.name}</div>
-              <div style={{ fontSize: 12, color: 'var(--text3)' }}>{userTasks(user.id).length} tasks · {doneTasks(user.id)} done</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)' }}>Staff · {userTasks(user.id).length} tasks · {doneTasks(user.id)} done</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 80, height: 4, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
@@ -401,7 +405,7 @@ function Team() {
 function Meetings({ userId, isAdmin }) {
   const [meetings, setMeetings] = useState([])
   const [tasks, setTasks] = useState([])
-  const [profiles, setProfiles] = useState({})
+  const [staffUsers, setStaffUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [activeMeeting, setActiveMeeting] = useState(null)
   const [showNewTask, setShowNewTask] = useState(false)
@@ -409,30 +413,36 @@ function Meetings({ userId, isAdmin }) {
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const { toast } = useAppStore()
+
   useEffect(() => {
     Promise.all([
       sb.from('meetings').select('*').order('date', { ascending: false }),
       sb.from('tasks').select('*').eq('is_meeting_task', true),
-      sb.from('profiles').select('*')
-    ]).then(([{ data: m }, { data: t }, { data: p }]) => {
-      const map = {}; (p || []).forEach(pr => map[pr.id] = pr)
-      setMeetings(m || []); setTasks(t || []); setProfiles(map)
+      sb.from('users').select('id, name').eq('role', 'user').eq('is_active', true).order('name'),
+    ]).then(([{ data: m }, { data: t }, { data: u }]) => {
+      setMeetings(m || []); setTasks(t || []); setStaffUsers(u || [])
       if (m?.length) { setActiveMeeting(m[0]); setNotes(m[0].notes || '') }
       setLoading(false)
     })
   }, [])
+
+  const staffMap = {}
+  staffUsers.forEach(u => { staffMap[u.id] = u.name })
+
   const createMeeting = async () => {
     const payload = { date: new Date().toISOString().split('T')[0], notes: '' }
     if (userId) payload.created_by = userId
     const { data } = await sb.from('meetings').insert(payload).select().single()
     if (data) { setMeetings([data, ...meetings]); setActiveMeeting(data); setNotes('') }
   }
+
   const saveNotes = async () => {
     setSaving(true)
     await sb.from('meetings').update({ notes }).eq('id', activeMeeting.id)
     setMeetings(meetings.map(m => m.id === activeMeeting.id ? { ...m, notes } : m))
     setSaving(false); toast('Notes saved!')
   }
+
   const addTask = async (e) => {
     e.preventDefault()
     const payload = { ...newTask, meeting_id: activeMeeting.id, is_meeting_task: true, status: 'todo' }
@@ -441,15 +451,19 @@ function Meetings({ userId, isAdmin }) {
     if (data) setTasks([...tasks, data])
     setNewTask({ title: '', assigned_to: '', start_date: '', deadline: '' }); setShowNewTask(false)
   }
+
   const toggleStatus = async (task) => {
     const next = { todo: 'in_progress', in_progress: 'done', done: 'todo' }
     const newStatus = next[task.status]
     await sb.from('tasks').update({ status: newStatus }).eq('id', task.id)
     setTasks(tasks.map(t => t.id === task.id ? { ...t, status: newStatus } : t))
   }
+
   const meetingTasks = (mid) => tasks.filter(t => t.meeting_id === mid)
   const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
+
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+
   return (
     <div style={{ display: 'flex', gap: 20 }}>
       <div style={{ width: 160, flexShrink: 0 }}>
@@ -476,11 +490,13 @@ function Meetings({ userId, isAdmin }) {
             </div>
             {showNewTask && (
               <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                <div className="field"><label>Task title</label><input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Task title" required /></div>
-                <div className="field"><label>Assign to</label>
+                <div className="field"><label>Task title</label>
+                  <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Task title" required />
+                </div>
+                <div className="field"><label>Assign to (staff)</label>
                   <select value={newTask.assigned_to} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })} required>
-                    <option value="">Assign to...</option>
-                    {Object.values(profiles).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    <option value="">— Select staff member —</option>
+                    {staffUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                   </select>
                 </div>
                 <div className="grid-2">
@@ -503,7 +519,7 @@ function Meetings({ userId, isAdmin }) {
                     </button>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13, color: task.status === 'done' ? 'var(--text3)' : 'var(--text)', textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>{task.title}</div>
-                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{profiles[task.assigned_to]?.name} · {task.start_date} → {task.deadline}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text3)' }}>{staffMap[task.assigned_to] || '—'} · {task.start_date} → {task.deadline}</div>
                     </div>
                     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 500, ...statusStyle(task.status) }}>{task.status.replace('_', ' ')}</span>
                   </div>
@@ -523,22 +539,28 @@ function Meetings({ userId, isAdmin }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ADMIN TAB
+// ASSIGN OTHERS TAB (was Admin) — renamed
 // ══════════════════════════════════════════════════════════════
-function PMAdmin({ userId }) {
-  const [profiles, setProfiles] = useState([])
+function AssignOthers({ userId }) {
+  const [staffUsers, setStaffUsers] = useState([])
   const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(true)
   const [newTask, setNewTask] = useState({ title: '', assigned_to: '', start_date: '', deadline: '', is_meeting_task: false })
   const [saving, setSaving] = useState(false)
   const { toast } = useAppStore()
+
   useEffect(() => {
     Promise.all([
-      sb.from('profiles').select('*'),
+      sb.from('users').select('id, name').eq('role', 'user').eq('is_active', true).order('name'),
       sb.from('tasks').select('*').order('created_at', { ascending: false })
-    ]).then(([{ data: p }, { data: t }]) => { setProfiles(p || []); setTasks(t || []); setLoading(false) })
+    ]).then(([{ data: u }, { data: t }]) => {
+      setStaffUsers(u || []); setTasks(t || []); setLoading(false)
+    })
   }, [])
-  const profileMap = {}; profiles.forEach(p => profileMap[p.id] = p)
+
+  const staffMap = {}
+  staffUsers.forEach(u => { staffMap[u.id] = u.name })
+
   const createTask = async (e) => {
     e.preventDefault(); setSaving(true)
     try {
@@ -552,22 +574,28 @@ function PMAdmin({ userId }) {
     } catch(err) { toast('Error: ' + (err?.message || 'Could not create task')) }
     setSaving(false)
   }
+
   const deleteTask = async (id) => {
     if (!confirm('Delete this task?')) return
     await sb.from('tasks').delete().eq('id', id)
     setTasks(tasks.filter(t => t.id !== id)); toast('Task deleted.')
   }
+
   const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
+
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 20 }}>
         <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Create new task</div>
-        <div className="field"><label>Task title</label><input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Task title" required /></div>
-        <div className="field"><label>Assign to</label>
+        <div className="field"><label>Task title</label>
+          <input value={newTask.title} onChange={e => setNewTask({ ...newTask, title: e.target.value })} placeholder="Task title" required />
+        </div>
+        <div className="field"><label>Assign to (staff)</label>
           <select value={newTask.assigned_to} onChange={e => setNewTask({ ...newTask, assigned_to: e.target.value })} required>
-            <option value="">Assign to...</option>
-            {profiles.map(p => <option key={p.id} value={p.id}>{p.name} ({p.role})</option>)}
+            <option value="">— Select staff member —</option>
+            {staffUsers.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
           </select>
         </div>
         <div className="grid-2">
@@ -588,7 +616,10 @@ function PMAdmin({ userId }) {
               <div key={task.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderBottom: '1px solid var(--surface2)' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 500 }}>{task.title}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>{profileMap[task.assigned_to]?.name} · {task.start_date} → {task.deadline}{task.is_meeting_task && <span style={{ color: BLUE, marginLeft: 8 }}>meeting task</span>}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text3)' }}>
+                    {staffMap[task.assigned_to] || 'Unassigned'} · {task.start_date} → {task.deadline}
+                    {task.is_meeting_task && <span style={{ color: BLUE, marginLeft: 8 }}>meeting task</span>}
+                  </div>
                 </div>
                 <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, fontWeight: 500, ...statusStyle(task.status) }}>{task.status.replace('_', ' ')}</span>
                 <button onClick={() => deleteTask(task.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#c84b2f', fontSize: 12 }}>delete</button>
@@ -606,17 +637,18 @@ function PMAdmin({ userId }) {
 // ══════════════════════════════════════════════════════════════
 function Chat({ userId }) {
   const [messages, setMessages] = useState([])
-  const [profiles, setProfiles] = useState({})
+  const [staffMap, setStaffMap] = useState({})
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(true)
   const bottomRef = useRef(null)
+
   useEffect(() => {
     Promise.all([
-      sb.from('profiles').select('*'),
+      sb.from('users').select('id, name, role').in('role', ['user', 'admin']).eq('is_active', true),
       sb.from('messages').select('*').order('sent_at', { ascending: true })
-    ]).then(([{ data: p }, { data: m }]) => {
-      const map = {}; (p || []).forEach(pr => map[pr.id] = pr)
-      setProfiles(map); setMessages(m || []); setLoading(false)
+    ]).then(([{ data: u }, { data: m }]) => {
+      const map = {}; (u || []).forEach(user => map[user.id] = user)
+      setStaffMap(map); setMessages(m || []); setLoading(false)
     })
     const channel = sb.channel('pm_messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
@@ -624,7 +656,9 @@ function Chat({ userId }) {
       }).subscribe()
     return () => sb.removeChannel(channel)
   }, [])
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
   const sendMessage = async (e) => {
     e.preventDefault()
     if (!newMessage.trim()) return
@@ -633,22 +667,25 @@ function Chat({ userId }) {
     await sb.from('messages').insert(payload)
     setNewMessage('')
   }
+
   const formatTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
   if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 500 }}>
       <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 12 }}>
         {messages.length === 0 && <div style={{ fontSize: 14, color: 'var(--text3)' }}>No messages yet. Say hello!</div>}
         {messages.map(msg => {
           const isMe = msg.sender_id === userId
-          const sender = profiles[msg.sender_id]
+          const sender = staffMap[msg.sender_id]
           return (
             <div key={msg.id} style={{ display: 'flex', alignItems: 'flex-end', gap: 8, flexDirection: isMe ? 'row-reverse' : 'row' }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', background: sender?.role === 'admin' ? '#e8f0fe' : ORANGE_LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: sender?.role === 'admin' ? BLUE : ORANGE, flexShrink: 0 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: ORANGE_LIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: ORANGE, flexShrink: 0 }}>
                 {sender?.name?.slice(0, 2).toUpperCase() || 'A'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start', gap: 2, maxWidth: '70%' }}>
-                {!isMe && <span style={{ fontSize: 11, color: 'var(--text3)', paddingLeft: 4 }}>{sender?.name}</span>}
+                {!isMe && <span style={{ fontSize: 11, color: 'var(--text3)', paddingLeft: 4 }}>{sender?.name || 'Staff'}</span>}
                 <div style={{ padding: '8px 14px', borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px', background: isMe ? BLUE : 'var(--surface2)', color: isMe ? 'white' : 'var(--text)', fontSize: 14 }}>
                   {msg.body}
                 </div>
@@ -674,8 +711,8 @@ export default function PM() {
   const { session } = useAppStore()
   const [activeTab, setActiveTab] = useState('tasks')
 
-  const userId = session?.userId        // null for owner admin
-  const isOwnerAdmin = !userId          // owner admin has no userId
+  const userId = session?.userId
+  const isOwnerAdmin = !userId
   const isAdmin = session?.role === 'admin' || session?.role === 'user'
 
   const tabs = [
@@ -683,7 +720,8 @@ export default function PM() {
     { key: 'team',     label: 'Team' },
     { key: 'meetings', label: 'Meetings' },
     { key: 'chat',     label: 'Chat' },
-    ...(session?.role === 'admin' ? [{ key: 'admin', label: 'Admin' }] : [])
+    // Only shown to admin role — renamed to "Assign others"
+    ...(session?.role === 'admin' ? [{ key: 'assign', label: 'Assign others' }] : [])
   ]
 
   return (
@@ -704,9 +742,9 @@ export default function PM() {
       </div>
       {activeTab === 'tasks'    && <MyTasks userId={userId} isAdmin={isAdmin} isOwnerAdmin={isOwnerAdmin} />}
       {activeTab === 'team'     && <Team />}
-      {activeTab === 'meetings' && <Meetings userId={userId} isAdmin={session?.role === 'admin'} />}
+      {activeTab === 'meetings' && <Meetings userId={userId} isAdmin={isAdmin} />}
       {activeTab === 'chat'     && <Chat userId={userId} />}
-      {activeTab === 'admin'    && session?.role === 'admin' && <PMAdmin userId={userId} />}
+      {activeTab === 'assign'   && session?.role === 'admin' && <AssignOthers userId={userId} />}
     </div>
   )
 }

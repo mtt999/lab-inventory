@@ -12,28 +12,11 @@ const AVATARS = ['🧪', '🔬', '📐', '🏗️', '⚗️', '🧬', '🔭', '�
 const groupColor = { Material: '#92400e', Sustainability: '#1e4d39', GPR: '#0369a1', Mechanic: '#7c4dbd', Other: '#6b6860' }
 const groupBg   = { Material: '#fef3c7', Sustainability: '#e8f2ee', GPR: '#e0f2fe', Mechanic: '#f3eeff', Other: '#f0efe9' }
 
-// ── Column mapping for students (data imported with wrong column headers) ──
-// DB column 'name'   → stores Last Name
-// DB column 'email'  → stores First Name
-// DB column 'phone'  → stores Email address
-// DB column 'degree' → stores Supervisor name
-const sFirstName = s => s?.email || ''
-const sLastName  = s => s?.name  || ''
-const sEmail     = s => s?.phone || ''
+// Column mapping for students (imported with wrong headers)
+const sFirstName  = s => s?.email  || ''
+const sLastName   = s => s?.name   || ''
+const sEmail      = s => s?.phone  || ''
 const sSupervisor = s => s?.degree || s?.supervisor || ''
-
-function AvatarPicker({ selected, onSelect }) {
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
-      {AVATARS.map(a => (
-        <button key={a} type="button" onClick={() => onSelect(a)}
-          style={{ width: 44, height: 44, borderRadius: '50%', border: `2px solid ${a === selected ? 'var(--accent)' : 'var(--border)'}`, background: a === selected ? 'var(--accent-light)' : 'var(--surface2)', fontSize: 22, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.15s' }}>
-          {a}
-        </button>
-      ))}
-    </div>
-  )
-}
 
 function AdminProfile() {
   const { session, toast } = useAppStore()
@@ -105,9 +88,11 @@ function AdminSettings({ session, toast }) {
   )
 }
 
+// ── STUDENTS PANEL — searchable, sorted by last name ──
 function StudentsPanel({ toast }) {
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editStudent, setEditStudent] = useState(null)
   const [importPreview, setImportPreview] = useState(null)
@@ -118,24 +103,34 @@ function StudentsPanel({ toast }) {
 
   async function load() {
     setLoading(true)
+    // name col = last name, email col = first name — sort by last name (name col)
     const { data } = await sb.from('users').select('*').eq('role', 'student').order('name')
     setStudents(data || [])
     setLoading(false)
   }
 
+  // Filter by first name, last name, or email
+  const filtered = students.filter(s => {
+    if (!search.trim()) return true
+    const q = search.toLowerCase()
+    return (
+      sFirstName(s).toLowerCase().includes(q) ||
+      sLastName(s).toLowerCase().includes(q) ||
+      sEmail(s).toLowerCase().includes(q)
+    )
+  })
+
   async function saveStudent(form, id) {
-    // form.firstName → email col, form.lastName → name col, form.emailAddr → phone col, form.supervisor → degree col
     if (!form.firstName.trim() && !form.lastName.trim()) { toast('Name is required.'); return }
     if (!id && !form.password) { toast('Password is required.'); return }
     const payload = {
-      name: form.lastName.trim(),           // last name stored in 'name'
-      email: form.firstName.trim() || null, // first name stored in 'email'
-      phone: form.emailAddr || null,        // email address stored in 'phone'
-      degree: form.supervisor || null,      // supervisor stored in 'degree'
+      name: form.lastName.trim(),
+      email: form.firstName.trim() || null,
+      phone: form.emailAddr || null,
+      degree: form.supervisor || null,
       year_semester: form.year_semester || null,
       project_group: form.project_group || null,
-      role: 'student', is_active: true, admin_level: 0,
-      pin: '',
+      role: 'student', is_active: true, admin_level: 0, pin: '',
     }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
     if (id) {
@@ -196,13 +191,28 @@ function StudentsPanel({ toast }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 14, color: 'var(--text2)' }}>{students.length} student{students.length !== 1 ? 's' : ''}</div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn-sm" onClick={() => fileRef.current?.click()}>⬆️ Import Excel</button>
           <button className="btn btn-sm btn-primary" onClick={() => { setEditStudent(null); setShowModal(true) }}>+ Add student</button>
         </div>
       </div>
+
+      {/* Search box */}
+      <div style={{ position: 'relative', marginBottom: 16 }}>
+        <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text3)', pointerEvents: 'none' }}>🔍</span>
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name or email…"
+          style={{ paddingLeft: 36, width: '100%', boxSizing: 'border-box' }}
+        />
+        {search && (
+          <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>×</button>
+        )}
+      </div>
+
       <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={async e => {
         try { setImportPreview(await parseExcel(e.target.files[0])) } catch { toast('Error reading file.') }
       }} />
@@ -217,21 +227,21 @@ function StudentsPanel({ toast }) {
           </div>
         </div>
       )}
-      {loading ? <div style={{ textAlign: 'center', padding: 24 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-        : students.length === 0 ? <div className="empty-state"><div className="empty-icon">👥</div>No students yet.</div>
-        : students.map((s, idx) => (
+
+      {loading
+        ? <div style={{ textAlign: 'center', padding: 24 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+        : filtered.length === 0
+        ? <div className="empty-state"><div className="empty-icon">👥</div>{search ? 'No students match your search.' : 'No students yet.'}</div>
+        : filtered.map((s, idx) => (
           <div key={s.id} className="card" style={{ padding: '12px 18px', marginBottom: 10, opacity: s.is_active ? 1 : 0.5 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div>
-                {/* First name (email col) bold, Last name (name col) smaller below */}
                 <div style={{ fontWeight: 600 }}>
                   <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginRight: 6 }}>#{idx+1}</span>
-                  {sFirstName(s)}
+                  {/* Show Last, First */}
+                  {sLastName(s)}{sLastName(s) && sFirstName(s) ? ', ' : ''}{sFirstName(s)}
                   {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}
                 </div>
-                {sLastName(s) && (
-                  <div style={{ fontSize: 12, color: 'var(--text2)', marginTop: 1, marginLeft: 22 }}>{sLastName(s)}</div>
-                )}
                 <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 3 }}>
                   {sEmail(s) && <span>📧 {sEmail(s)}</span>}
                   {s.password && <span>🔑 {s.password}</span>}
@@ -254,65 +264,36 @@ function StudentsPanel({ toast }) {
 
 function StudentModal({ student, onClose, onSave }) {
   const [form, setForm] = useState(student ? {
-    firstName: sFirstName(student),   // email col
-    lastName:  sLastName(student),    // name col
-    emailAddr: sEmail(student),       // phone col
-    supervisor: sSupervisor(student), // degree col
-    password: '',
-    year_semester: student.year_semester||'',
-    project_group: student.project_group||'',
-  } : {
-    firstName: '', lastName: '', emailAddr: '', supervisor: '',
-    password: '', year_semester: '', project_group: ''
-  })
+    firstName: sFirstName(student), lastName: sLastName(student),
+    emailAddr: sEmail(student), supervisor: sSupervisor(student),
+    password: '', year_semester: student.year_semester||'', project_group: student.project_group||'',
+  } : { firstName: '', lastName: '', emailAddr: '', supervisor: '', password: '', year_semester: '', project_group: '' })
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:520, width:'100%', maxHeight:'90vh', overflowY:'auto', border:'1px solid var(--border)' }}>
         <div style={{ fontWeight:600, fontSize:16, marginBottom:20 }}>{student ? 'Edit student' : 'Add student'}</div>
-
-        {/* Name row */}
         <div className="grid-2">
-          <div className="field">
-            <label>First Name *</label>
-            <input value={form.firstName} onChange={e=>setForm(f=>({...f,firstName:e.target.value}))} placeholder="e.g. Ivan" autoFocus />
-          </div>
-          <div className="field">
-            <label>Last Name *</label>
-            <input value={form.lastName} onChange={e=>setForm(f=>({...f,lastName:e.target.value}))} placeholder="e.g. Akonya" />
-          </div>
+          <div className="field"><label>First Name *</label><input value={form.firstName} onChange={e=>setForm(f=>({...f,firstName:e.target.value}))} placeholder="e.g. Ivan" autoFocus /></div>
+          <div className="field"><label>Last Name *</label><input value={form.lastName} onChange={e=>setForm(f=>({...f,lastName:e.target.value}))} placeholder="e.g. Akonya" /></div>
         </div>
-
-        {/* Email + Password */}
-        <div className="field">
-          <label>Email Address</label>
-          <input type="email" value={form.emailAddr} onChange={e=>setForm(f=>({...f,emailAddr:e.target.value}))} placeholder="netid@illinois.edu" />
-        </div>
+        <div className="field"><label>Email Address</label><input type="email" value={form.emailAddr} onChange={e=>setForm(f=>({...f,emailAddr:e.target.value}))} placeholder="netid@illinois.edu" /></div>
         <div className="field">
           <label>Password{student ? ' (leave blank to keep current)' : ' *'}</label>
           <input type="text" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder={student ? 'Type new password to change' : 'Min. 6 chars'} />
           {student && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Current: {student.password || '—'} · Leave blank to keep unchanged</div>}
         </div>
-
-        {/* Supervisor + Project Group */}
         <div className="grid-2">
-          <div className="field">
-            <label>Supervisor</label>
-            <input value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} placeholder="e.g. Prof. Imad Al-Qadi" />
-          </div>
+          <div className="field"><label>Supervisor</label><input value={form.supervisor} onChange={e=>setForm(f=>({...f,supervisor:e.target.value}))} placeholder="e.g. Prof. Imad Al-Qadi" /></div>
           <div className="field"><label>Project Group</label>
             <select value={form.project_group} onChange={e=>setForm(f=>({...f,project_group:e.target.value}))}>
               <option value="">— Select —</option>{PROJECT_GROUPS.map(g=><option key={g} value={g}>{g}</option>)}
             </select>
           </div>
         </div>
-
-        {/* Year Semester */}
-        <div className="field">
-          <label>Year & Semester</label>
+        <div className="field"><label>Year & Semester</label>
           <input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" />
         </div>
-
         <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <button className="btn btn-primary" onClick={()=>onSave(form, student?.id)}>Save</button>
           <button className="btn" onClick={onClose}>Cancel</button>
@@ -350,7 +331,7 @@ function StaffListPanel({ toast }) {
 
   async function load() {
     setLoading(true)
-    const { data } = await sb.from('users').select('*').in('role', ['user', 'admin']).order('name')
+    const { data } = await sb.from('users').select('*').eq('role', 'user').order('name')
     setStaff(data || [])
     setLoading(false)
   }
@@ -358,12 +339,9 @@ function StaffListPanel({ toast }) {
   async function saveStaff(form, id) {
     if (!form.name.trim()) { toast('Name is required.'); return }
     if (!id && !form.password) { toast('Password is required.'); return }
-    const adminLv = parseInt(form.admin_level) || 0
-    const role = adminLv >= 1 ? 'admin' : 'user'
     const payload = {
       name: form.name.trim(), email: form.email || null, phone: form.phone || null,
-      role, is_active: true, admin_level: Math.max(0, adminLv),
-      pin: '',
+      role: 'user', is_active: true, admin_level: 0, pin: '',
     }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
     if (id) {
@@ -387,10 +365,11 @@ function StaffListPanel({ toast }) {
     load(); toast('Deleted.')
   }
 
-  async function setAdminLevel(u, level) {
-    const role = level >= 1 ? 'admin' : 'user'
-    await sb.from('users').update({ admin_level: level, role }).eq('id', u.id)
-    toast(`${u.name} updated ✓`); load()
+  // Staff can change role between Staff and Student — no admin option
+  async function setMemberRole(u, newRole) {
+    await sb.from('users').update({ role: newRole, admin_level: 0 }).eq('id', u.id)
+    toast(`${u.name} updated to ${newRole === 'user' ? 'Staff' : 'Student'} ✓`)
+    load()
   }
 
   return (
@@ -408,20 +387,21 @@ function StaffListPanel({ toast }) {
                 <div style={{ fontWeight: 600 }}>
                   <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginRight: 6 }}>#{idx+1}</span>
                   {s.name}
-                  {s.role === 'admin' && <span style={{ marginLeft: 8, fontSize: 11, background: '#e0f2fe', color: '#0369a1', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Admin {s.admin_level}</span>}
-                  {s.role === 'user'  && <span style={{ marginLeft: 8, fontSize: 11, background: '#f3eeff', color: '#7c4dbd', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Staff/RE</span>}
+                  <span style={{ marginLeft: 8, fontSize: 11, background: '#fff3e0', color: '#ff6b00', borderRadius: 3, padding: '1px 6px', fontWeight: 600 }}>Staff</span>
                   {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)', display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
                   {s.email && <span>📧 {s.email}</span>}
                   {s.password && <span>🔑 {s.password}</span>}
                 </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                  {[{ label: 'Staff/RE', level: 0 }, { label: 'Admin 1', level: 1 }, { label: 'Admin 2', level: 2 }].map(opt => (
-                    <button key={opt.level}
-                      className={`btn btn-sm${(s.admin_level||0) === opt.level && s.role === (opt.level >= 1 ? 'admin' : 'user') ? ' btn-primary' : ''}`}
-                      style={{ fontSize: 11, padding: '2px 8px' }}
-                      onClick={() => setAdminLevel(s, opt.level)}>
+                {/* Role switcher: Staff ↔ Student only */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--text3)' }}>Change role:</span>
+                  {[{ label: 'Staff', role: 'user' }, { label: 'Student', role: 'student' }].map(opt => (
+                    <button key={opt.role}
+                      className={`btn btn-sm${s.role === opt.role ? ' btn-primary' : ''}`}
+                      style={{ fontSize: 11, padding: '2px 10px' }}
+                      onClick={() => setMemberRole(s, opt.role)}>
                       {opt.label}
                     </button>
                   ))}
@@ -442,9 +422,9 @@ function StaffListPanel({ toast }) {
 }
 
 function StaffModal({ staff, onClose, onSave }) {
-  const [form, setForm] = useState(staff ? {
-    name: staff.name||'', password: '', email: staff.email||'', phone: staff.phone||'', admin_level: staff.admin_level||0,
-  } : { name: '', password: '', email: '', phone: '', admin_level: 0 })
+  const [form, setForm] = useState(staff
+    ? { name: staff.name||'', password: '', email: staff.email||'', phone: staff.phone||'' }
+    : { name: '', password: '', email: '', phone: '' })
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:480, width:'100%', border:'1px solid var(--border)' }}>
@@ -459,15 +439,8 @@ function StaffModal({ staff, onClose, onSave }) {
             <input type="text" value={form.password} onChange={e=>setForm(f=>({...f,password:e.target.value}))} placeholder={staff ? 'Type to change' : 'Min. 6 chars'} />
             {staff && <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>Current: {staff.password || '—'}</div>}
           </div>
-          <div className="field"><label>Role Level</label>
-            <select value={form.admin_level} onChange={e=>setForm(f=>({...f,admin_level:parseInt(e.target.value)}))}>
-              <option value={0}>Staff / RE</option>
-              <option value={1}>Admin 1</option>
-              <option value={2}>Admin 2</option>
-            </select>
-          </div>
+          <div className="field"><label>Phone</label><input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} /></div>
         </div>
-        <div className="field"><label>Phone</label><input value={form.phone} onChange={e=>setForm(f=>({...f,phone:e.target.value}))} /></div>
         <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <button className="btn btn-primary" onClick={()=>onSave(form, staff?.id)}>Save</button>
           <button className="btn" onClick={onClose}>Cancel</button>
@@ -480,7 +453,7 @@ function StaffModal({ staff, onClose, onSave }) {
 function SupervisorSelect({ value, onChange }) {
   const [supervisors, setSupervisors] = useState([])
   useEffect(() => {
-    sb.from('users').select('id, name').in('role', ['user','admin']).eq('is_active', true).order('name')
+    sb.from('users').select('id, name').eq('role', 'user').eq('is_active', true).order('name')
       .then(({ data }) => setSupervisors(data || []))
   }, [])
   return (
@@ -491,8 +464,37 @@ function SupervisorSelect({ value, onChange }) {
   )
 }
 
-function UserProfile({ session }) {
-  const { toast, setSession } = useAppStore()
+// Staff profile panel (role = 'user') — own info + manage students/staff
+function StaffProfile({ session }) {
+  const { toast } = useAppStore()
+  const [activeTab, setActiveTab] = useState('info')
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div className="section-title">Profile & Management</div>
+        <HelpPanel screen="profile" />
+      </div>
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
+        {[
+          { key: 'info',     label: '👤 My Profile' },
+          { key: 'students', label: '👥 Students' },
+          { key: 'staff',    label: '👨‍💼 Staff Members' },
+        ].map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            style={{ padding: '10px 24px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: activeTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${activeTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === 'info'     && <UserProfileForm session={session} toast={toast} />}
+      {activeTab === 'students' && <StudentsPanel toast={toast} />}
+      {activeTab === 'staff'    && <StaffListPanel toast={toast} />}
+    </div>
+  )
+}
+
+function UserProfileForm({ session, toast }) {
+  const { setSession } = useAppStore()
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('info')
@@ -568,11 +570,10 @@ function UserProfile({ session }) {
       const { error: uploadErr } = await sb.storage.from('project-files').upload(path, compressed, { contentType: 'image/jpeg', upsert: true })
       if (uploadErr) throw uploadErr
       const photoUrl = sb.storage.from('project-files').getPublicUrl(path).data.publicUrl
-      const { error: saveErr } = await sb.from('users').update({ photo_url: photoUrl }).eq('id', user.id)
-      if (saveErr) throw saveErr
+      await sb.from('users').update({ photo_url: photoUrl }).eq('id', user.id)
       setForm(f => ({ ...f, photo_url: photoUrl }))
       setUser(u => ({ ...u, photo_url: photoUrl }))
-      setSession({ ...session, photoUrl: photoUrl })
+      setSession({ ...session, photoUrl })
       toast('Photo saved ✓')
     } catch (err) { toast('Upload failed: ' + (err?.message || String(err))) }
     setUploading(false)
@@ -583,28 +584,20 @@ function UserProfile({ session }) {
 
   const displayName = [user.name, user.last_name].filter(Boolean).join(' ')
   const previewPhoto = form.photo_url || user.photo_url
-  const avatarContent = previewPhoto
-    ? <img src={previewPhoto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-    : <span style={{ fontSize: 32, color: 'var(--text3)' }}>👤</span>
 
   return (
-    <div style={{ maxWidth: 640, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div className="section-title">My Profile</div>
-        <HelpPanel screen="profile" />
-      </div>
+    <div style={{ maxWidth: 640 }}>
       <div className="card" style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
         <div style={{ width: 72, height: 72, borderRadius: '50%', background: 'var(--surface2)', border: '2px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
-          {avatarContent}
+          {previewPhoto ? <img src={previewPhoto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <span style={{ fontSize: 32, color: 'var(--text3)' }}>👤</span>}
         </div>
         <div>
           <div style={{ fontWeight: 700, fontSize: 20 }}>{displayName || user.name}</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
             <span style={{ background: 'var(--surface2)', borderRadius: 99, padding: '3px 12px', fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>
-              {user.role === 'student' ? 'Student' : 'Staff / RE'}
+              {user.role === 'student' ? 'Student' : 'Staff'}
             </span>
             {user.project_group && <span style={{ background: groupBg[user.project_group]||'#f0efe9', color: groupColor[user.project_group]||'#6b6860', borderRadius: 99, padding: '3px 12px', fontSize: 12, fontWeight: 600 }}>{user.project_group}</span>}
-            {user.degree && <span style={{ background: 'var(--surface2)', borderRadius: 99, padding: '3px 12px', fontSize: 12, color: 'var(--text2)' }}>{user.degree}</span>}
           </div>
         </div>
       </div>
@@ -666,8 +659,7 @@ function UserProfile({ session }) {
             </div>
             {form.photo_url && (
               <button className="btn btn-sm" onClick={async () => {
-                const { error } = await sb.from('users').update({ photo_url: null }).eq('id', user.id)
-                if (error) { toast('Error: ' + error.message); return }
+                await sb.from('users').update({ photo_url: null }).eq('id', user.id)
                 setForm(f => ({ ...f, photo_url: '' }))
                 setUser(u => ({ ...u, photo_url: null }))
                 setSession({ ...session, photoUrl: null })
@@ -675,12 +667,12 @@ function UserProfile({ session }) {
               }}>Remove</button>
             )}
           </div>
-          <div style={{ marginBottom: 20 }}>
+          <div>
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>Upload a photo</div>
-            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Saves automatically — no need to click Save.</div>
+            <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Saves automatically.</div>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhoto(e.target.files[0])} />
             <button className="btn btn-sm btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>
-              {uploading ? '⏳ Uploading & saving…' : '⬆️ Choose photo'}
+              {uploading ? '⏳ Uploading…' : '⬆️ Choose photo'}
             </button>
           </div>
         </div>
@@ -688,11 +680,11 @@ function UserProfile({ session }) {
       {activeTab === 'pin' && (
         <div className="card">
           <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Change password</div>
-          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Your password must be at least 6 characters.</div>
-          <div className="field"><label>Current password</label><input type="password" value={pinForm.current} onChange={e => { setPinForm(f => ({ ...f, current: e.target.value })); setPinError('') }} placeholder="Current password" /></div>
+          <div style={{ fontSize: 13, color: 'var(--text3)', marginBottom: 20 }}>Minimum 6 characters.</div>
+          <div className="field"><label>Current password</label><input type="password" value={pinForm.current} onChange={e => { setPinForm(f => ({ ...f, current: e.target.value })); setPinError('') }} /></div>
           <div className="grid-2">
-            <div className="field"><label>New password</label><input type="password" value={pinForm.newPin} onChange={e => { setPinForm(f => ({ ...f, newPin: e.target.value })); setPinError('') }} placeholder="Min. 6 characters" /></div>
-            <div className="field"><label>Confirm new password</label><input type="password" value={pinForm.confirm} onChange={e => { setPinForm(f => ({ ...f, confirm: e.target.value })); setPinError('') }} placeholder="Confirm new password" /></div>
+            <div className="field"><label>New password</label><input type="password" value={pinForm.newPin} onChange={e => { setPinForm(f => ({ ...f, newPin: e.target.value })); setPinError('') }} /></div>
+            <div className="field"><label>Confirm</label><input type="password" value={pinForm.confirm} onChange={e => { setPinForm(f => ({ ...f, confirm: e.target.value })); setPinError('') }} /></div>
           </div>
           {pinError && <div style={{ fontSize: 13, color: 'var(--accent2)', marginBottom: 12 }}>⚠️ {pinError}</div>}
           <button className="btn btn-primary" onClick={savePin} disabled={!pinForm.current || !pinForm.newPin || !pinForm.confirm}>Update password</button>
@@ -702,12 +694,27 @@ function UserProfile({ session }) {
   )
 }
 
+function UserProfile({ session }) {
+  const { toast } = useAppStore()
+  return (
+    <div style={{ maxWidth: 640, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div className="section-title">My Profile</div>
+        <HelpPanel screen="profile" />
+      </div>
+      <UserProfileForm session={session} toast={toast} />
+    </div>
+  )
+}
+
 export default function Profile() {
   const { session } = useAppStore()
   if (session?.role === 'admin') return <AdminProfile />
+  if (session?.role === 'user') return <StaffProfile session={session} />
   return <UserProfile session={session} />
 }
 
+// ── ACCESS CONTROL — now includes PM and Profile icons ──
 function AccessControl({ toast }) {
   const ALL_SCREENS = [
     { key: 'home',        label: 'Supply Inventory',    icon: '📦' },
@@ -719,6 +726,8 @@ function AccessControl({ toast }) {
     { key: 'remessages',  label: 'Contact Lab Manager', icon: '💬' },
     { key: 'mileage',     label: 'Mileage Form',        icon: '🚗' },
     { key: 'labsafety',   label: 'Lab Safety',          icon: '🦺' },
+    { key: 'pm',          label: 'Project Management',  icon: '📋' },
+    { key: 'profile',     label: 'Profile',             icon: '👤' },
   ]
   const [users, setUsers] = useState([])
   const [selected, setSelected] = useState(null)
@@ -731,7 +740,7 @@ function AccessControl({ toast }) {
 
   async function loadUsers() {
     setLoading(true)
-    const { data } = await sb.from('users').select('id, name, role, admin_level').in('role', ['user', 'admin']).eq('is_active', true).order('name')
+    const { data } = await sb.from('users').select('id, name, role').eq('role', 'user').eq('is_active', true).order('name')
     setUsers(data || [])
     setLoading(false)
   }
@@ -764,7 +773,7 @@ function AccessControl({ toast }) {
         <label>Select staff member</label>
         <select value={selected?.id || ''} onChange={e => setSelected(users.find(u => u.id === e.target.value) || null)}>
           <option value="">— Select —</option>
-          {users.map(u => <option key={u.id} value={u.id}>{u.name} ({u.role === 'admin' ? 'Admin ' + u.admin_level : 'Staff/RE'})</option>)}
+          {users.map(u => <option key={u.id} value={u.id}>{u.name} (Staff)</option>)}
         </select>
       </div>
       {selected && (
@@ -797,6 +806,7 @@ function IconImageManager({ toast }) {
     { key: 'labsafety',   label: 'Lab Safety',         icon: '🦺', bg: '#fef3c7' },
     { key: 'remessages',  label: 'Contact Lab Manager',icon: '💬', bg: '#e8f2ee' },
     { key: 'profile',     label: 'Profile',            icon: '👤', bg: '#f3eeff' },
+    { key: 'pm',          label: 'Project Management', icon: '📋', bg: '#fff3e0' },
   ]
   const [images, setImages] = useState({})
   const [uploading, setUploading] = useState(null)
