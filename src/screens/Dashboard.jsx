@@ -2,22 +2,45 @@ import { useState, useEffect } from 'react'
 import { sb } from '../lib/supabase'
 import { useAppStore } from '../store/useAppStore'
 
+// All modules — PM only shown to admin/user (staff)
 function getModules(role) {
   const all = [
-    { key: 'supply',      screen: 'home',        label: 'Supply Inventory',       sub: 'Weekly inspection & export',       icon: '📦', bg: '#e8f2ee', color: '#2a6049' },
-    { key: 'projects',    screen: 'projects',    label: 'Project Inventory',      sub: 'Materials, storage & database',    icon: '🧪', bg: '#f3eeff', color: '#7c4dbd' },
-    { key: 'training',    screen: 'training',    label: 'Training Records',       sub: 'Certs, equipment & alarm',         icon: '🎓', bg: '#e0f2fe', color: '#0369a1' },
-    { key: 'equipment',   screen: 'equipment',   label: 'Equipment Inventory',    sub: 'Lab equipment tracking',           icon: '🔧', bg: '#fef3c7', color: '#92400e' },
-    { key: 'equipmenthub',screen: 'equipmenthub',label: 'Equipment',              sub: 'Info, SOP & standards',            icon: '📚', bg: '#e8f2ee', color: '#1e4d39' },
-    { key: 'booking',     screen: 'booking',     label: 'Booking Equipment',      sub: 'Reserve lab equipment',            icon: '📅', bg: '#e0f2fe', color: '#0369a1' },
-    { key: 'mileage',     screen: null,          label: 'Mileage Form',           sub: 'Submit mileage reimbursement',     icon: '🚗', bg: '#fdf0ed', color: '#c84b2f', external: true },
-    { key: 'labsafety',   screen: null,          label: 'Lab Safety',             sub: 'Safety training & certification',  icon: '🦺', bg: '#fef3c7', color: '#92400e', external: true },
-    { key: 'remessages',  screen: 'remessages',  label: 'Contact Lab Manager (REs)', sub: 'Notes, ideas & issue reports', icon: '💬', bg: '#e8f2ee', color: '#2a6049' },
-    { key: 'profile',     screen: 'profile',     label: 'Profile',                sub: 'Your info & settings',             icon: '👤', bg: '#f3eeff', color: '#7c4dbd' },
+    { key: 'supply',      screen: 'home',        label: 'Supply Inventory',          sub: 'Weekly inspection & export',       icon: '📦', bg: '#e8f2ee', color: '#2a6049' },
+    { key: 'projects',    screen: 'projects',    label: 'Project Inventory',         sub: 'Materials, storage & database',    icon: '🧪', bg: '#f3eeff', color: '#7c4dbd' },
+    { key: 'training',    screen: 'training',    label: 'Training Records',          sub: 'Certs, equipment & alarm',         icon: '🎓', bg: '#e0f2fe', color: '#0369a1' },
+    { key: 'equipment',   screen: 'equipment',   label: 'Equipment Inventory',       sub: 'Lab equipment tracking',           icon: '🔧', bg: '#fef3c7', color: '#92400e' },
+    { key: 'equipmenthub',screen: 'equipmenthub',label: 'Equipment',                 sub: 'Info, SOP & standards',            icon: '📚', bg: '#e8f2ee', color: '#1e4d39' },
+    { key: 'booking',     screen: 'booking',     label: 'Booking Equipment',         sub: 'Reserve lab equipment',            icon: '📅', bg: '#e0f2fe', color: '#0369a1' },
+    { key: 'mileage',     screen: null,          label: 'Mileage Form',              sub: 'Submit mileage reimbursement',     icon: '🚗', bg: '#fdf0ed', color: '#c84b2f', external: true },
+    { key: 'labsafety',   screen: null,          label: 'Lab Safety',                sub: 'Safety training & certification',  icon: '🦺', bg: '#fef3c7', color: '#92400e', external: true },
+    { key: 'remessages',  screen: 'remessages',  label: 'Contact Lab Manager (REs)', sub: 'Notes, ideas & issue reports',    icon: '💬', bg: '#e8f2ee', color: '#2a6049' },
+    { key: 'profile',     screen: 'profile',     label: 'Profile',                   sub: 'Your info & settings',             icon: '👤', bg: '#f3eeff', color: '#7c4dbd' },
   ]
-  if (role === 'admin') return all.filter(m => !m.external)
+  // PM module — only for admin and staff (user role)
+  const pmModule = { key: 'pm', screen: 'pm', label: 'Project Management', sub: 'Tasks, meetings & team chat', icon: '📋', bg: '#fff3e0', color: '#ff6b00' }
+
+  if (role === 'admin') return [...all.filter(m => !m.external), pmModule]
+  if (role === 'user')  return [...all, pmModule]
   if (role === 'student') return all.filter(m => ['projects','training','profile','equipmenthub','booking','mileage','labsafety','remessages'].includes(m.key))
   return all
+}
+
+// ALL modules visible to students but locked — for blurred card display
+function getAllModulesForStudent() {
+  return [
+    { key: 'supply',      screen: 'home',        label: 'Supply Inventory',          sub: 'Weekly inspection & export',       icon: '📦', bg: '#e8f2ee', color: '#2a6049' },
+    { key: 'projects',    screen: 'projects',    label: 'Project Inventory',         sub: 'Materials, storage & database',    icon: '🧪', bg: '#f3eeff', color: '#7c4dbd' },
+    { key: 'training',    screen: 'training',    label: 'Training Records',          sub: 'Certs, equipment & alarm',         icon: '🎓', bg: '#e0f2fe', color: '#0369a1' },
+    { key: 'equipment',   screen: 'equipment',   label: 'Equipment Inventory',       sub: 'Lab equipment tracking',           icon: '🔧', bg: '#fef3c7', color: '#92400e', locked: true },
+    { key: 'equipmenthub',screen: 'equipmenthub',label: 'Equipment',                 sub: 'Info, SOP & standards',            icon: '📚', bg: '#e8f2ee', color: '#1e4d39' },
+    { key: 'booking',     screen: 'booking',     label: 'Booking Equipment',         sub: 'Reserve lab equipment',            icon: '📅', bg: '#e0f2fe', color: '#0369a1' },
+    { key: 'mileage',     screen: null,          label: 'Mileage Form',              sub: 'Submit mileage reimbursement',     icon: '🚗', bg: '#fdf0ed', color: '#c84b2f', external: true },
+    { key: 'labsafety',   screen: null,          label: 'Lab Safety',                sub: 'Safety training & certification',  icon: '🦺', bg: '#fef3c7', color: '#92400e', external: true },
+    { key: 'remessages',  screen: 'remessages',  label: 'Contact Lab Manager (REs)', sub: 'Notes, ideas & issue reports',    icon: '💬', bg: '#e8f2ee', color: '#2a6049' },
+    { key: 'pm',          screen: 'pm',          label: 'Project Management',        sub: 'Tasks, meetings & team chat',      icon: '📋', bg: '#fff3e0', color: '#ff6b00', locked: true },
+    { key: 'profile',     screen: 'profile',     label: 'Profile',                   sub: 'Your info & settings',             icon: '👤', bg: '#f3eeff', color: '#7c4dbd' },
+    { key: 'supply_admin',screen: 'home',        label: 'Admin Tools',               sub: 'Rooms, supplies & settings',       icon: '⚙️', bg: '#f5f5f5', color: '#555', locked: true },
+  ]
 }
 
 function ExternalLinkModal({ url, onConfirm, onCancel }) {
@@ -37,6 +60,7 @@ function ExternalLinkModal({ url, onConfirm, onCancel }) {
   )
 }
 
+// Normal clickable card
 function ModuleCard({ m, onClick, imgUrl, isAdminManage }) {
   return (
     <div onClick={onClick}
@@ -56,8 +80,50 @@ function ModuleCard({ m, onClick, imgUrl, isAdminManage }) {
   )
 }
 
-function CardGridView({ modules, onNavigate, mileageUrl, labSafetyUrl, isAdmin, onEditUrl, moduleImages }) {
+// Blurred locked card shown to students for features they can't access
+function LockedCard({ m }) {
+  return (
+    <div style={{ borderRadius: 'var(--radius-lg)', overflow: 'hidden', border: '1px solid var(--border)', position: 'relative', height: 160, cursor: 'not-allowed' }}>
+      {/* Blurred background */}
+      <div style={{ position: 'absolute', inset: 0, background: m.bg, filter: 'blur(2px)', opacity: 0.5 }} />
+      {/* Lock overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.55)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+        <div style={{ fontSize: 22, filter: 'grayscale(1)', opacity: 0.4 }}>{m.icon}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: '#888' }}>{m.label}</div>
+        <div style={{ fontSize: 10, color: '#aaa', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span>🔒</span> Staff only
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CardGridView({ modules, onNavigate, mileageUrl, labSafetyUrl, isAdmin, onEditUrl, moduleImages, isStudent, studentUnlocked }) {
   const [confirmExternal, setConfirmExternal] = useState(null)
+
+  if (isStudent) {
+    // Show all modules — unlocked ones are clickable, locked ones are blurred
+    const allMods = getAllModulesForStudent()
+    return (
+      <>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14 }}>
+          {allMods.map(m => {
+            if (m.locked) return <LockedCard key={m.key} m={m} />
+            return (
+              <ModuleCard key={m.key} m={m} imgUrl={moduleImages[m.key]}
+                onClick={() => m.external ? setConfirmExternal({ url: m.key === 'mileage' ? mileageUrl : labSafetyUrl }) : onNavigate(m.screen)} />
+            )
+          })}
+        </div>
+        {confirmExternal && (
+          <ExternalLinkModal url={confirmExternal.url}
+            onConfirm={() => { window.open(confirmExternal.url, '_blank'); setConfirmExternal(null) }}
+            onCancel={() => setConfirmExternal(null)} />
+        )}
+      </>
+    )
+  }
+
   return (
     <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 14 }}>
@@ -88,7 +154,7 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
   const [data, setData] = useState({
     myProjects: 0,
     trainingsComplete: 0,
-    trainingsTotal: 4, // fresh, golf car, equipment, alarm
+    trainingsTotal: 4,
     upcomingBookings: [],
     pendingCert: false,
   })
@@ -102,13 +168,9 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
     try {
       const userId = session.userId
       const userName = session.username
-
-      // Count projects assigned to this student
       const { data: projects } = await sb.from('projects').select('id, title, status')
         .or(`students.cs.{"${userName}"},students.ilike.%${userName}%`)
         .eq('status', 'active')
-
-      // Check training completions for this user
       const [freshRes, golfRes, alarmRes, eqRes, pendingRes, bookingsRes] = await Promise.all([
         sb.from('training_fresh').select('id, admin_approved').eq('user_id', userId).maybeSingle(),
         sb.from('training_golf_car').select('id').eq('user_id', userId).maybeSingle(),
@@ -116,24 +178,14 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
         sb.from('training_equipment').select('id').eq('user_id', userId).limit(1),
         sb.from('training_fresh').select('id').eq('user_id', userId).eq('admin_approved', false).maybeSingle(),
         sb.from('equipment_bookings').select('id, equipment_name, start_time, end_time, status')
-          .eq('user_id', userId)
-          .gte('start_time', new Date().toISOString())
-          .order('start_time').limit(3),
+          .eq('user_id', userId).gte('start_time', new Date().toISOString()).order('start_time').limit(3),
       ])
-
       let done = 0
       if (freshRes.data?.admin_approved) done++
       if (golfRes.data) done++
       if (alarmRes.data) done++
       if (eqRes.data?.length) done++
-
-      setData({
-        myProjects: projects?.length || 0,
-        trainingsComplete: done,
-        trainingsTotal: 4,
-        upcomingBookings: bookingsRes.data || [],
-        pendingCert: !!pendingRes.data,
-      })
+      setData({ myProjects: projects?.length || 0, trainingsComplete: done, trainingsTotal: 4, upcomingBookings: bookingsRes.data || [], pendingCert: !!pendingRes.data })
     } catch(e) {}
     setLoading(false)
   }
@@ -154,23 +206,17 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
     <>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 260px', gap: 20, alignItems: 'start' }}>
         <div>
-          {/* Stat cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
-            {/* My Projects */}
             <div onClick={() => onNavigate('projects')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#7c4dbd'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
               <div style={{ fontSize: 28, fontWeight: 600, color: '#7c4dbd', marginBottom: 4 }}>{loading ? '—' : data.myProjects}</div>
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>My active projects</div>
             </div>
-
-            {/* Training progress */}
             <div onClick={() => onNavigate('training')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = trainingColor}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
-              <div style={{ fontSize: 28, fontWeight: 600, color: trainingColor, marginBottom: 4 }}>
-                {loading ? '—' : `${data.trainingsComplete}/${data.trainingsTotal}`}
-              </div>
+              <div style={{ fontSize: 28, fontWeight: 600, color: trainingColor, marginBottom: 4 }}>{loading ? '—' : `${data.trainingsComplete}/${data.trainingsTotal}`}</div>
               <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 8 }}>Trainings complete</div>
               {!loading && (
                 <div style={{ height: 4, background: 'var(--surface2)', borderRadius: 99, overflow: 'hidden' }}>
@@ -178,16 +224,12 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
                 </div>
               )}
             </div>
-
-            {/* Upcoming bookings */}
             <div onClick={() => onNavigate('booking')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = '#0369a1'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
               <div style={{ fontSize: 28, fontWeight: 600, color: '#0369a1', marginBottom: 4 }}>{loading ? '—' : data.upcomingBookings.length}</div>
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>Upcoming bookings</div>
             </div>
-
-            {/* Cert status */}
             <div onClick={() => onNavigate('training')} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', cursor: 'pointer', transition: 'all 0.15s' }}
               onMouseEnter={e => e.currentTarget.style.borderColor = data.pendingCert ? '#c84b2f' : '#2a6049'}
               onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border)'}>
@@ -195,8 +237,6 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
               <div style={{ fontSize: 13, color: 'var(--text2)' }}>{data.pendingCert ? 'Cert pending approval' : 'Cert up to date'}</div>
             </div>
           </div>
-
-          {/* Upcoming bookings detail */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px', marginBottom: 16 }}>
             <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 }}>Upcoming bookings</div>
             {loading ? <div style={{ textAlign: 'center', padding: 16 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
@@ -208,20 +248,14 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
                     <div key={b.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--surface2)' }}>
                       <div>
                         <div style={{ fontSize: 14, fontWeight: 500 }}>{b.equipment_name || 'Equipment'}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
-                          {start.toLocaleDateString()} · {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>{start.toLocaleDateString()} · {start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
                       </div>
-                      <span style={{ fontSize: 11, color: b.status === 'confirmed' ? '#2a6049' : '#0369a1', background: b.status === 'confirmed' ? '#e8f2ee' : '#e0f2fe', borderRadius: 4, padding: '2px 8px', fontWeight: 500 }}>
-                        {b.status || 'Pending'}
-                      </span>
+                      <span style={{ fontSize: 11, color: b.status === 'confirmed' ? '#2a6049' : '#0369a1', background: b.status === 'confirmed' ? '#e8f2ee' : '#e0f2fe', borderRadius: 4, padding: '2px 8px', fontWeight: 500 }}>{b.status || 'Pending'}</span>
                     </div>
                   )
                 })
             }
           </div>
-
-          {/* Training checklist */}
           <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '18px 20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Training checklist</div>
@@ -246,8 +280,6 @@ function StudentDashboardView({ session, onNavigate, mileageUrl, labSafetyUrl, m
             ))}
           </div>
         </div>
-
-        {/* Right sidebar — quick access */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--text3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>Quick access</div>
           {quickLinks.map(m => (
@@ -383,13 +415,13 @@ export default function Dashboard() {
   }, [session?.userId])
 
   const allModules = getModules(session?.role)
-  const modules = userAccess ? allModules.filter(m => m.external || !m.screen || userAccess.has(m.screen) || m.screen === 'profile' || m.screen === 'dashboard') : allModules
+  const modules = userAccess ? allModules.filter(m => m.external || !m.screen || userAccess.has(m.screen) || m.screen === 'profile' || m.screen === 'dashboard' || m.screen === 'pm') : allModules
 
   useEffect(() => { loadSettings() }, [])
 
   async function loadSettings() {
     const { data } = await sb.from('settings').select('key, value')
-      .in('key', ['mileage_url','labsafety_url','img_supply','img_projects','img_training','img_equipment','img_equipmenthub','img_booking','img_mileage','img_labsafety','img_remessages','img_profile'])
+      .in('key', ['mileage_url','labsafety_url','img_supply','img_projects','img_training','img_equipment','img_equipmenthub','img_booking','img_mileage','img_labsafety','img_remessages','img_profile','img_pm'])
     if (!data) return
     const imgs = {}
     data.forEach(r => {
@@ -417,8 +449,6 @@ export default function Dashboard() {
   const months = ['January','February','March','April','May','June','July','August','September','October','November','December']
   const now = new Date()
   const dateStr = `${days[now.getDay()]}, ${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`
-
-  // Students only see Cards and their own Dashboard — no admin stats
   const showDashboardToggle = !isStudent
 
   return (
@@ -444,17 +474,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* STUDENT: show student dashboard or card grid */}
       {isStudent && view === 'dashboard' && (
         <StudentDashboardView session={session} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} moduleImages={moduleImages} />
       )}
       {isStudent && view === 'grid' && (
-        <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={false} onEditUrl={() => {}} moduleImages={moduleImages} />
+        <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={false} onEditUrl={() => {}} moduleImages={moduleImages} isStudent={true} />
       )}
-
-      {/* ADMIN/STAFF: original views */}
       {!isStudent && view === 'grid' && (
-        <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} moduleImages={moduleImages} />
+        <CardGridView modules={modules} onNavigate={s => setScreen(s)} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} moduleImages={moduleImages} isStudent={false} />
       )}
       {!isStudent && view === 'dashboard' && (
         <DashboardView modules={modules} onNavigate={s => setScreen(s)} session={session} mileageUrl={mileageUrl} labSafetyUrl={labSafetyUrl} isAdmin={isAdmin} onEditUrl={(type) => { setEditingUrl(type); setUrlInput(type === 'mileage' ? mileageUrl : labSafetyUrl) }} moduleImages={moduleImages} />
