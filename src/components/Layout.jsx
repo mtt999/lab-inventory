@@ -1,6 +1,6 @@
 import { useAppStore } from '../store/useAppStore'
+import NotificationBell from './NotificationBell'
 
-// iLab logo as inline SVG component — no image file needed
 function ILabLogo({ size = 40 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
@@ -39,41 +39,22 @@ export default function Layout({ children }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <header style={{
-        background: '#0d47a1',
-        borderBottom: '1px solid #0a3d91',
-        padding: '0 16px',
-        height: 56,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100
-      }}>
-        {/* Logo + app name */}
-        <div onClick={() => setScreen('dashboard')}
-          style={{ cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
+      <header style={{ background: '#0d47a1', borderBottom: '1px solid #0a3d91', padding: '0 16px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 100 }}>
+        <div onClick={() => setScreen('dashboard')} style={{ cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
           <ILabLogo size={42} />
           <div>
-            <div style={{ fontFamily: 'var(--sans)', fontWeight: 700, fontSize: 15, letterSpacing: '-0.3px', color: '#ffffff', lineHeight: 1.1 }}>
-              InteleLab-ICT
-            </div>
-            <div style={{ fontSize: 10, color: '#ffb380', fontWeight: 400, letterSpacing: '0.02em', lineHeight: 1.2 }}>
-              The Intelligent Laboratory
-            </div>
+            <div style={{ fontFamily: 'var(--sans)', fontWeight: 700, fontSize: 15, letterSpacing: '-0.3px', color: '#ffffff', lineHeight: 1.1 }}>InteleLab-ICT</div>
+            <div style={{ fontSize: 10, color: '#ffb380', fontWeight: 400, letterSpacing: '0.02em', lineHeight: 1.2 }}>The Intelligent Laboratory</div>
           </div>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {screen !== 'dashboard' && (
-            <button className="btn btn-sm"
-              style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: '#ffffff', fontWeight: 500 }}
-              onClick={() => setScreen('dashboard')}>← Home</button>
+            <button className="btn btn-sm" style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', color: '#ffffff', fontWeight: 500 }} onClick={() => setScreen('dashboard')}>← Home</button>
           )}
+          {/* Notification bell — shown to logged-in users with a real userId */}
+          {session?.userId && <NotificationBell />}
           {session && (
-            <button onClick={() => setScreen('profile')}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 99, padding: '4px 10px 4px 4px', cursor: 'pointer', transition: 'all 0.15s' }}
+            <button onClick={() => setScreen('profile')} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'transparent', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 99, padding: '4px 10px 4px 4px', cursor: 'pointer', transition: 'all 0.15s' }}
               onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden', flexShrink: 0 }}>
@@ -87,13 +68,9 @@ export default function Layout({ children }) {
               {displayName && <span style={{ fontSize: 13, color: '#e3f2fd', fontFamily: 'var(--mono)', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</span>}
             </button>
           )}
-          <button className="btn btn-sm" onClick={logout}
-            style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#ffffff', flexShrink: 0 }}>
-            Sign out
-          </button>
+          <button className="btn btn-sm" onClick={logout} style={{ border: '1px solid rgba(255,255,255,0.3)', background: 'transparent', color: '#ffffff', flexShrink: 0 }}>Sign out</button>
         </div>
       </header>
-
       <main style={{ flex: 1, maxWidth: screen === 'booking' ? '100%' : 960, margin: '0 auto', width: '100%', padding: screen === 'booking' ? '16px 10px' : '24px 16px' }}>
         {children}
       </main>
