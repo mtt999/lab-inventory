@@ -188,11 +188,20 @@ function MiniCalendar({ tasks, onDayClick }) {
   )
 }
 
+// ══════════════════════════════════════════════════════════════
+// TASK DETAIL MODAL — editable dates, renamed section title
+// ══════════════════════════════════════════════════════════════
 function TaskModal({ task, onClose, onUpdate, currentUserId, currentUserName }) {
   const [localTask, setLocalTask] = useState(task)
   const [saving, setSaving] = useState(false)
   const { toast } = useAppStore()
-  const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
+
+  const statusStyle = (s) => ({
+    todo:        { background: '#f1f1f1', color: '#555' },
+    in_progress: { background: ORANGE_LIGHT, color: ORANGE },
+    done:        { background: '#e8f5e9', color: '#2e7d32' },
+  }[s] || {})
+
   const cycleStatus = async () => {
     const next = { todo: 'in_progress', in_progress: 'done', done: 'todo' }
     const newStatus = next[localTask.status]
@@ -200,29 +209,50 @@ function TaskModal({ task, onClose, onUpdate, currentUserId, currentUserName }) 
     const updated = { ...localTask, status: newStatus }
     setLocalTask(updated); onUpdate(updated)
   }
+
   const updateProgress = async (val) => {
     await sb.from('tasks').update({ progress: val }).eq('id', localTask.id)
     const updated = { ...localTask, progress: val }
     setLocalTask(updated); onUpdate(updated)
   }
-  const saveNotes = async () => {
+
+  // Save notes + dates together
+  const saveDetails = async () => {
     setSaving(true)
-    await sb.from('tasks').update({ notes: localTask.notes }).eq('id', localTask.id)
-    onUpdate(localTask); setSaving(false); toast('Notes saved!')
+    await sb.from('tasks').update({
+      notes: localTask.notes,
+      start_date: localTask.start_date || null,
+      deadline: localTask.deadline || null,
+    }).eq('id', localTask.id)
+    onUpdate(localTask)
+    setSaving(false)
+    toast('Task details saved!')
   }
+
   const color = progressColor(localTask.progress || 0)
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: 'var(--surface)', borderRadius: 18, border: '1px solid var(--border)', width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto', padding: 26 }}>
+
+        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
           <div style={{ fontWeight: 700, fontSize: 17, flex: 1, paddingRight: 12, lineHeight: 1.3 }}>{localTask.title}</div>
           <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text3)', lineHeight: 1 }}>×</button>
         </div>
+
+        {/* Status + Progress badges */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button onClick={cycleStatus} style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, fontWeight: 600, border: 'none', cursor: 'pointer', ...statusStyle(localTask.status) }}>{localTask.status.replace('_', ' ')} ↻</button>
-          <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, background: '#e8f0fe', color: BLUE, fontWeight: 600 }}>{localTask.progress || 0}% complete</span>
-          {localTask.deadline && <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, background: 'var(--surface2)', color: 'var(--text3)', fontWeight: 500 }}>📅 Due {localTask.deadline}</span>}
+          <button onClick={cycleStatus}
+            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, fontWeight: 600, border: 'none', cursor: 'pointer', ...statusStyle(localTask.status) }}>
+            {localTask.status.replace('_', ' ')} ↻
+          </button>
+          <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, background: '#e8f0fe', color: BLUE, fontWeight: 600 }}>
+            {localTask.progress || 0}% complete
+          </span>
         </div>
+
+        {/* Progress tape */}
         <div style={{ background: 'var(--surface2)', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
           <ProgressTape progress={localTask.progress || 0} />
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -234,24 +264,51 @@ function TaskModal({ task, onClose, onUpdate, currentUserId, currentUserName }) 
             ))}
           </div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 18 }}>
-          <div style={{ background: 'var(--surface2)', borderRadius: 8, padding: 12 }}>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Start date</div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{localTask.start_date || '—'}</div>
-          </div>
-          <div style={{ background: 'var(--surface2)', borderRadius: 8, padding: 12 }}>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Deadline</div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{localTask.deadline || '—'}</div>
-          </div>
-        </div>
+
+        {/* ── Task detail section (renamed from Notes, now includes editable dates) ── */}
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text2)', marginBottom: 6 }}>📝 Notes</div>
-          <textarea rows={3} style={{ resize: 'vertical', width: '100%', boxSizing: 'border-box', fontSize: 13 }}
-            value={localTask.notes || ''} onChange={e => setLocalTask({ ...localTask, notes: e.target.value })} placeholder="Add notes about this task…" />
-          <button className="btn btn-primary" style={{ marginTop: 6, fontSize: 12, padding: '5px 14px' }} onClick={saveNotes} disabled={saving}>{saving ? 'Saving…' : 'Save notes'}</button>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
+            📋 Task detail
+          </div>
+
+          {/* Editable dates */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Start date</label>
+              <input type="date" value={localTask.start_date || ''}
+                onChange={e => setLocalTask({ ...localTask, start_date: e.target.value })} />
+            </div>
+            <div className="field" style={{ marginBottom: 0 }}>
+              <label>Deadline</label>
+              <input type="date" value={localTask.deadline || ''}
+                onChange={e => setLocalTask({ ...localTask, deadline: e.target.value })} />
+            </div>
+          </div>
+
+          {/* Notes */}
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Notes</label>
+            <textarea rows={3} style={{ resize: 'vertical', width: '100%', boxSizing: 'border-box', fontSize: 13 }}
+              value={localTask.notes || ''}
+              onChange={e => setLocalTask({ ...localTask, notes: e.target.value })}
+              placeholder="Add notes about this task…" />
+          </div>
+
+          <button className="btn btn-primary" style={{ marginTop: 10, fontSize: 12, padding: '6px 16px' }} onClick={saveDetails} disabled={saving}>
+            {saving ? 'Saving…' : 'Save details'}
+          </button>
         </div>
+
+        {/* Divider */}
         <div style={{ borderTop: '1px solid var(--border)', marginBottom: 16 }} />
-        <TaskComments taskId={localTask.id} currentUserId={currentUserId} currentUserName={currentUserName} assignedTo={localTask.assigned_to} />
+
+        {/* Comments */}
+        <TaskComments
+          taskId={localTask.id}
+          currentUserId={currentUserId}
+          currentUserName={currentUserName}
+          assignedTo={localTask.assigned_to}
+        />
       </div>
     </div>
   )
@@ -827,12 +884,12 @@ export default function PM() {
           </button>
         ))}
       </div>
-      {activeTab === 'tasks'  && <MyTasks userId={userId} isAdmin={isAdmin} isOwnerAdmin={isOwnerAdmin} userName={userName} />}
-      {activeTab === 'team'   && <Team />}
+      {activeTab === 'tasks'    && <MyTasks userId={userId} isAdmin={isAdmin} isOwnerAdmin={isOwnerAdmin} userName={userName} />}
+      {activeTab === 'team'     && <Team />}
       {activeTab === 'meetings' && <Meetings userId={userId} isAdmin={isAdmin} />}
-      {activeTab === 'chat'   && <Chat userId={userId} />}
-      {activeTab === 'notifs' && <NotificationPrefs userId={userId} />}
-      {activeTab === 'assign' && session?.role === 'admin' && <AssignOthers userId={userId} />}
+      {activeTab === 'chat'     && <Chat userId={userId} />}
+      {activeTab === 'notifs'   && <NotificationPrefs userId={userId} />}
+      {activeTab === 'assign'   && session?.role === 'admin' && <AssignOthers userId={userId} />}
     </div>
   )
 }
