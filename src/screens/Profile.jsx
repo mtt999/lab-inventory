@@ -7,17 +7,143 @@ const PROJECT_GROUPS = ['Material', 'Sustainability', 'GPR', 'Mechanic', 'Other'
 const DEGREES = ['MS', 'PhD', 'BS', 'Other']
 const SEMESTERS = ['Fall', 'Spring', 'Summer']
 const YEARS = Array.from({ length: 15 }, (_, i) => String(new Date().getFullYear() - i))
-const AVATARS = ['🧪', '🔬', '📐', '🏗️', '⚗️', '🧬', '🔭', '📊', '🛠️', '🧱', '💡', '🎓']
 
 const groupColor = { Material: '#92400e', Sustainability: '#1e4d39', GPR: '#0369a1', Mechanic: '#7c4dbd', Other: '#6b6860' }
 const groupBg   = { Material: '#fef3c7', Sustainability: '#e8f2ee', GPR: '#e0f2fe', Mechanic: '#f3eeff', Other: '#f0efe9' }
 
-// Column mapping for students (imported with wrong headers)
 const sFirstName  = s => s?.email  || ''
 const sLastName   = s => s?.name   || ''
 const sEmail      = s => s?.phone  || ''
 const sSupervisor = s => s?.degree || s?.supervisor || ''
 
+// ══════════════════════════════════════════════════════════════
+// NOTIFICATION PREFERENCES — shared by all roles
+// Events are filtered by role
+// ══════════════════════════════════════════════════════════════
+function NotificationPrefsPanel({ userId, role }) {
+  const [prefs, setPrefs] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const { toast } = useAppStore()
+
+  // Define events per role
+  const SECTIONS = [
+    {
+      title: '📅 Equipment Booking',
+      desc: 'Notifications about your equipment reservations.',
+      roles: ['student', 'user', 'admin'],
+      events: [
+        { key: 'booking_confirmed',   label: 'Booking confirmed' },
+        { key: 'booking_reminder',    label: 'Upcoming booking reminder (1 day before)' },
+        { key: 'booking_cancelled',   label: 'Booking cancelled' },
+      ]
+    },
+    {
+      title: '🎓 Training & Certifications',
+      desc: 'Stay on top of your training status.',
+      roles: ['student'],
+      events: [
+        { key: 'training_approved',   label: 'Training certificate approved' },
+        { key: 'training_expiring',   label: 'Training certificate expiring soon' },
+        { key: 'training_submitted',  label: 'Training submission received (confirmation)' },
+      ]
+    },
+    {
+      title: '📋 Project Management',
+      desc: 'Notifications from the PM workspace.',
+      roles: ['user', 'admin'],
+      events: [
+        { key: 'task_assigned',       label: 'Task assigned to me' },
+        { key: 'task_comment',        label: 'New comment on my task' },
+        { key: 'meeting_added',       label: 'New meeting task assigned to me' },
+        { key: 'task_status_changed', label: 'Task status changed by someone else' },
+      ]
+    },
+    {
+      title: '💬 Lab Messages',
+      desc: 'Messages from the Contact Lab Manager feature.',
+      roles: ['student', 'user', 'admin'],
+      events: [
+        { key: 'message_reply',       label: 'Reply received to my message' },
+      ]
+    },
+  ].filter(s => s.roles.includes(role))
+
+  useEffect(() => { if (userId) load() }, [userId])
+
+  async function load() {
+    setLoading(true)
+    const { data } = await sb.from('notification_prefs').select('*').eq('user_id', userId).maybeSingle()
+    // Build defaults: all in-app ON, all email OFF
+    const defaults = {}
+    SECTIONS.forEach(sec => sec.events.forEach(ev => {
+      defaults[ev.key] = true
+      defaults[`email_${ev.key}`] = false
+    }))
+    setPrefs(data ? { ...defaults, ...data } : defaults)
+    setLoading(false)
+  }
+
+  async function save() {
+    setSaving(true)
+    await sb.from('notification_prefs').upsert({ ...prefs, user_id: userId })
+    toast('Notification preferences saved ✓')
+    setSaving(false)
+  }
+
+  if (!userId) return <div style={{ fontSize: 13, color: 'var(--text3)', padding: 16 }}>Sign in to manage notification preferences.</div>
+  if (loading) return <div style={{ padding: 24, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+
+  return (
+    <div>
+      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20, lineHeight: 1.6 }}>
+        Choose how you want to be notified for each event. <strong>In-app</strong> shows a bell 🔔 notification inside iLab. <strong>Email</strong> sends to your registered email address.
+      </div>
+
+      {SECTIONS.map(sec => (
+        <div key={sec.title} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden', marginBottom: 20 }}>
+          {/* Section header */}
+          <div style={{ padding: '12px 16px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{sec.title}</div>
+              <div style={{ fontSize: 12, color: 'var(--text3)', marginTop: 2 }}>{sec.desc}</div>
+            </div>
+            <div style={{ display: 'flex', gap: 24, fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>
+              <span style={{ width: 50, textAlign: 'center' }}>In-app 🔔</span>
+              <span style={{ width: 50, textAlign: 'center' }}>Email 📧</span>
+            </div>
+          </div>
+
+          {/* Event rows */}
+          {sec.events.map((ev, i) => (
+            <div key={ev.key} style={{ display: 'flex', alignItems: 'center', padding: '12px 16px', borderBottom: i < sec.events.length - 1 ? '1px solid var(--surface2)' : 'none' }}>
+              <div style={{ flex: 1, fontSize: 13, fontWeight: 500 }}>{ev.label}</div>
+              <div style={{ display: 'flex', gap: 24, flexShrink: 0 }}>
+                <div style={{ width: 50, textAlign: 'center' }}>
+                  <input type="checkbox" checked={!!prefs[ev.key]}
+                    onChange={e => setPrefs(p => ({ ...p, [ev.key]: e.target.checked }))}
+                    style={{ width: 'auto', cursor: 'pointer', transform: 'scale(1.3)' }} />
+                </div>
+                <div style={{ width: 50, textAlign: 'center' }}>
+                  <input type="checkbox" checked={!!prefs[`email_${ev.key}`]}
+                    onChange={e => setPrefs(p => ({ ...p, [`email_${ev.key}`]: e.target.checked }))}
+                    style={{ width: 'auto', cursor: 'pointer', transform: 'scale(1.3)' }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+
+      <div style={{ fontSize: 11, color: 'var(--text3)', marginBottom: 12 }}>Email notifications require your email address to be set in your profile. Contact your admin to enable email delivery.</div>
+      <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save notification preferences'}</button>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════
+// ADMIN PROFILE
+// ══════════════════════════════════════════════════════════════
 function AdminProfile() {
   const { session, toast } = useAppStore()
   const [adminTab, setAdminTab] = useState('admin')
@@ -33,6 +159,7 @@ function AdminProfile() {
           { key: 'students', label: '👥 Students' },
           { key: 'staff',    label: '👨‍💼 Staff & Access' },
           { key: 'icons',    label: '🖼️ Icon Images' },
+          { key: 'notifs',   label: '🔔 Notifications' },
         ].map(t => (
           <button key={t.key} onClick={() => setAdminTab(t.key)}
             style={{ padding: '10px 24px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: adminTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${adminTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
@@ -44,6 +171,7 @@ function AdminProfile() {
       {adminTab === 'students' && <StudentsPanel toast={toast} />}
       {adminTab === 'staff'    && <StaffPanel toast={toast} />}
       {adminTab === 'icons'    && <IconImageManager toast={toast} />}
+      {adminTab === 'notifs'   && <NotificationPrefsPanel userId={session?.userId} role="admin" />}
     </div>
   )
 }
@@ -61,9 +189,7 @@ function AdminSettings({ session, toast }) {
     setSaving(true)
     if (session.userId) {
       const { data } = await sb.from('users').select('password').eq('id', session.userId).single()
-      if (data?.password && data.password !== form.currentPassword) {
-        setError('Current password is incorrect.'); setSaving(false); return
-      }
+      if (data?.password && data.password !== form.currentPassword) { setError('Current password is incorrect.'); setSaving(false); return }
       await sb.from('users').update({ password: form.newPassword, ...(form.email ? { email: form.email } : {}) }).eq('id', session.userId)
     } else {
       await sb.from('settings').upsert({ key: 'admin_password', value: form.newPassword })
@@ -88,7 +214,7 @@ function AdminSettings({ session, toast }) {
   )
 }
 
-// ── STUDENTS PANEL — searchable, sorted by last name ──
+// ── STUDENTS PANEL ──
 function StudentsPanel({ toast }) {
   const [students, setStudents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -103,35 +229,21 @@ function StudentsPanel({ toast }) {
 
   async function load() {
     setLoading(true)
-    // name col = last name, email col = first name — sort by last name (name col)
     const { data } = await sb.from('users').select('*').eq('role', 'student').order('name')
     setStudents(data || [])
     setLoading(false)
   }
 
-  // Filter by first name, last name, or email
   const filtered = students.filter(s => {
     if (!search.trim()) return true
     const q = search.toLowerCase()
-    return (
-      sFirstName(s).toLowerCase().includes(q) ||
-      sLastName(s).toLowerCase().includes(q) ||
-      sEmail(s).toLowerCase().includes(q)
-    )
+    return sFirstName(s).toLowerCase().includes(q) || sLastName(s).toLowerCase().includes(q) || sEmail(s).toLowerCase().includes(q)
   })
 
   async function saveStudent(form, id) {
     if (!form.firstName.trim() && !form.lastName.trim()) { toast('Name is required.'); return }
     if (!id && !form.password) { toast('Password is required.'); return }
-    const payload = {
-      name: form.lastName.trim(),
-      email: form.firstName.trim() || null,
-      phone: form.emailAddr || null,
-      degree: form.supervisor || null,
-      year_semester: form.year_semester || null,
-      project_group: form.project_group || null,
-      role: 'student', is_active: true, admin_level: 0, pin: '',
-    }
+    const payload = { name: form.lastName.trim(), email: form.firstName.trim() || null, phone: form.emailAddr || null, degree: form.supervisor || null, year_semester: form.year_semester || null, project_group: form.project_group || null, role: 'student', is_active: true, admin_level: 0, pin: '' }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
     if (id) {
       const { error } = await sb.from('users').update(payload).eq('id', id)
@@ -143,16 +255,8 @@ function StudentsPanel({ toast }) {
     setShowModal(false); setEditStudent(null); load(); toast('Student saved ✓')
   }
 
-  async function toggleActive(s) {
-    await sb.from('users').update({ is_active: !s.is_active }).eq('id', s.id)
-    load(); toast(s.is_active ? 'Deactivated.' : 'Activated.')
-  }
-
-  async function deleteStudent(id) {
-    if (!confirm('Delete this student?')) return
-    await sb.from('users').delete().eq('id', id)
-    load(); toast('Deleted.')
-  }
+  async function toggleActive(s) { await sb.from('users').update({ is_active: !s.is_active }).eq('id', s.id); load(); toast(s.is_active ? 'Deactivated.' : 'Activated.') }
+  async function deleteStudent(id) { if (!confirm('Delete this student?')) return; await sb.from('users').delete().eq('id', id); load(); toast('Deleted.') }
 
   async function parseExcel(file) {
     const XLSX = await import('xlsx')
@@ -185,8 +289,7 @@ function StudentsPanel({ toast }) {
       const { error } = await sb.from('users').insert({ ...s, password: pw, pin: '', role: 'student', is_active: true, admin_level: 0 })
       if (!error) added++
     }
-    setImportPreview(null); setImporting(false); load()
-    toast(`${added} students imported.`)
+    setImportPreview(null); setImporting(false); load(); toast(`${added} students imported.`)
   }
 
   return (
@@ -198,24 +301,12 @@ function StudentsPanel({ toast }) {
           <button className="btn btn-sm btn-primary" onClick={() => { setEditStudent(null); setShowModal(true) }}>+ Add student</button>
         </div>
       </div>
-
-      {/* Search box */}
       <div style={{ position: 'relative', marginBottom: 16 }}>
         <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: 'var(--text3)', pointerEvents: 'none' }}>🔍</span>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search by name or email…"
-          style={{ paddingLeft: 36, width: '100%', boxSizing: 'border-box' }}
-        />
-        {search && (
-          <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>×</button>
-        )}
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or email…" style={{ paddingLeft: 36, width: '100%', boxSizing: 'border-box' }} />
+        {search && <button onClick={() => setSearch('')} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text3)' }}>×</button>}
       </div>
-
-      <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={async e => {
-        try { setImportPreview(await parseExcel(e.target.files[0])) } catch { toast('Error reading file.') }
-      }} />
+      <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={async e => { try { setImportPreview(await parseExcel(e.target.files[0])) } catch { toast('Error reading file.') } }} />
       {importPreview && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div style={{ fontWeight: 600, marginBottom: 8 }}>Import preview — {importPreview.length} students</div>
@@ -227,18 +318,14 @@ function StudentsPanel({ toast }) {
           </div>
         </div>
       )}
-
-      {loading
-        ? <div style={{ textAlign: 'center', padding: 24 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-        : filtered.length === 0
-        ? <div className="empty-state"><div className="empty-icon">👥</div>{search ? 'No students match your search.' : 'No students yet.'}</div>
+      {loading ? <div style={{ textAlign: 'center', padding: 24 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
+        : filtered.length === 0 ? <div className="empty-state"><div className="empty-icon">👥</div>{search ? 'No students match your search.' : 'No students yet.'}</div>
         : filtered.map((s, idx) => (
           <div key={s.id} className="card" style={{ padding: '12px 18px', marginBottom: 10, opacity: s.is_active ? 1 : 0.5 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
               <div>
                 <div style={{ fontWeight: 600 }}>
                   <span style={{ fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text3)', marginRight: 6 }}>#{idx+1}</span>
-                  {/* Show Last, First */}
                   {sLastName(s)}{sLastName(s) && sFirstName(s) ? ', ' : ''}{sFirstName(s)}
                   {!s.is_active && <span style={{ fontSize: 11, color: 'var(--accent2)', marginLeft: 6 }}>Inactive</span>}
                 </div>
@@ -264,11 +351,9 @@ function StudentsPanel({ toast }) {
 
 function StudentModal({ student, onClose, onSave }) {
   const [form, setForm] = useState(student ? {
-    firstName: sFirstName(student), lastName: sLastName(student),
-    emailAddr: sEmail(student), supervisor: sSupervisor(student),
+    firstName: sFirstName(student), lastName: sLastName(student), emailAddr: sEmail(student), supervisor: sSupervisor(student),
     password: '', year_semester: student.year_semester||'', project_group: student.project_group||'',
   } : { firstName: '', lastName: '', emailAddr: '', supervisor: '', password: '', year_semester: '', project_group: '' })
-
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:520, width:'100%', maxHeight:'90vh', overflowY:'auto', border:'1px solid var(--border)' }}>
@@ -291,9 +376,7 @@ function StudentModal({ student, onClose, onSave }) {
             </select>
           </div>
         </div>
-        <div className="field"><label>Year & Semester</label>
-          <input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" />
-        </div>
+        <div className="field"><label>Year & Semester</label><input value={form.year_semester} onChange={e=>setForm(f=>({...f,year_semester:e.target.value}))} placeholder="e.g. Fall 2024" /></div>
         <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <button className="btn btn-primary" onClick={()=>onSave(form, student?.id)}>Save</button>
           <button className="btn" onClick={onClose}>Cancel</button>
@@ -326,52 +409,20 @@ function StaffListPanel({ toast }) {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editStaff, setEditStaff] = useState(null)
-
   useEffect(() => { load() }, [])
-
-  async function load() {
-    setLoading(true)
-    const { data } = await sb.from('users').select('*').eq('role', 'user').order('name')
-    setStaff(data || [])
-    setLoading(false)
-  }
-
+  async function load() { setLoading(true); const { data } = await sb.from('users').select('*').eq('role', 'user').order('name'); setStaff(data || []); setLoading(false) }
   async function saveStaff(form, id) {
     if (!form.name.trim()) { toast('Name is required.'); return }
     if (!id && !form.password) { toast('Password is required.'); return }
-    const payload = {
-      name: form.name.trim(), email: form.email || null, phone: form.phone || null,
-      role: 'user', is_active: true, admin_level: 0, pin: '',
-    }
+    const payload = { name: form.name.trim(), email: form.email || null, phone: form.phone || null, role: 'user', is_active: true, admin_level: 0, pin: '' }
     if (form.password && form.password.trim()) payload.password = form.password.trim()
-    if (id) {
-      const { error } = await sb.from('users').update(payload).eq('id', id)
-      if (error) { toast('Error: ' + error.message); return }
-    } else {
-      const { error } = await sb.from('users').insert(payload)
-      if (error) { toast('Error: ' + error.message); return }
-    }
+    if (id) { const { error } = await sb.from('users').update(payload).eq('id', id); if (error) { toast('Error: ' + error.message); return } }
+    else { const { error } = await sb.from('users').insert(payload); if (error) { toast('Error: ' + error.message); return } }
     setShowModal(false); setEditStaff(null); load(); toast('Staff saved ✓')
   }
-
-  async function toggleActive(s) {
-    await sb.from('users').update({ is_active: !s.is_active }).eq('id', s.id)
-    load(); toast(s.is_active ? 'Deactivated.' : 'Activated.')
-  }
-
-  async function deleteStaff(id) {
-    if (!confirm('Delete this staff member?')) return
-    await sb.from('users').delete().eq('id', id)
-    load(); toast('Deleted.')
-  }
-
-  // Staff can change role between Staff and Student — no admin option
-  async function setMemberRole(u, newRole) {
-    await sb.from('users').update({ role: newRole, admin_level: 0 }).eq('id', u.id)
-    toast(`${u.name} updated to ${newRole === 'user' ? 'Staff' : 'Student'} ✓`)
-    load()
-  }
-
+  async function toggleActive(s) { await sb.from('users').update({ is_active: !s.is_active }).eq('id', s.id); load(); toast(s.is_active ? 'Deactivated.' : 'Activated.') }
+  async function deleteStaff(id) { if (!confirm('Delete this staff member?')) return; await sb.from('users').delete().eq('id', id); load(); toast('Deleted.') }
+  async function setMemberRole(u, newRole) { await sb.from('users').update({ role: newRole, admin_level: 0 }).eq('id', u.id); toast(`${u.name} updated to ${newRole === 'user' ? 'Staff' : 'Student'} ✓`); load() }
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -394,16 +445,10 @@ function StaffListPanel({ toast }) {
                   {s.email && <span>📧 {s.email}</span>}
                   {s.password && <span>🔑 {s.password}</span>}
                 </div>
-                {/* Role switcher: Staff ↔ Student only */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
                   <span style={{ fontSize: 11, color: 'var(--text3)' }}>Change role:</span>
                   {[{ label: 'Staff', role: 'user' }, { label: 'Student', role: 'student' }].map(opt => (
-                    <button key={opt.role}
-                      className={`btn btn-sm${s.role === opt.role ? ' btn-primary' : ''}`}
-                      style={{ fontSize: 11, padding: '2px 10px' }}
-                      onClick={() => setMemberRole(s, opt.role)}>
-                      {opt.label}
-                    </button>
+                    <button key={opt.role} className={`btn btn-sm${s.role === opt.role ? ' btn-primary' : ''}`} style={{ fontSize: 11, padding: '2px 10px' }} onClick={() => setMemberRole(s, opt.role)}>{opt.label}</button>
                   ))}
                 </div>
               </div>
@@ -422,9 +467,7 @@ function StaffListPanel({ toast }) {
 }
 
 function StaffModal({ staff, onClose, onSave }) {
-  const [form, setForm] = useState(staff
-    ? { name: staff.name||'', password: '', email: staff.email||'', phone: staff.phone||'' }
-    : { name: '', password: '', email: '', phone: '' })
+  const [form, setForm] = useState(staff ? { name: staff.name||'', password: '', email: staff.email||'', phone: staff.phone||'' } : { name: '', password: '', email: '', phone: '' })
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
       <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:28, maxWidth:480, width:'100%', border:'1px solid var(--border)' }}>
@@ -452,10 +495,7 @@ function StaffModal({ staff, onClose, onSave }) {
 
 function SupervisorSelect({ value, onChange }) {
   const [supervisors, setSupervisors] = useState([])
-  useEffect(() => {
-    sb.from('users').select('id, name').eq('role', 'user').eq('is_active', true).order('name')
-      .then(({ data }) => setSupervisors(data || []))
-  }, [])
+  useEffect(() => { sb.from('users').select('id, name').eq('role', 'user').eq('is_active', true).order('name').then(({ data }) => setSupervisors(data || [])) }, [])
   return (
     <select value={value||''} onChange={e => onChange(e.target.value)}>
       <option value="">— Select supervisor —</option>
@@ -464,7 +504,9 @@ function SupervisorSelect({ value, onChange }) {
   )
 }
 
-// Staff profile panel (role = 'user') — own info + manage students/staff
+// ══════════════════════════════════════════════════════════════
+// STAFF PROFILE — own info + manage students/staff + notifications
+// ══════════════════════════════════════════════════════════════
 function StaffProfile({ session }) {
   const { toast } = useAppStore()
   const [activeTab, setActiveTab] = useState('info')
@@ -479,6 +521,7 @@ function StaffProfile({ session }) {
           { key: 'info',     label: '👤 My Profile' },
           { key: 'students', label: '👥 Students' },
           { key: 'staff',    label: '👨‍💼 Staff Members' },
+          { key: 'notifs',   label: '🔔 Notifications' },
         ].map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
             style={{ padding: '10px 24px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: activeTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${activeTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
@@ -489,6 +532,7 @@ function StaffProfile({ session }) {
       {activeTab === 'info'     && <UserProfileForm session={session} toast={toast} />}
       {activeTab === 'students' && <StudentsPanel toast={toast} />}
       {activeTab === 'staff'    && <StaffListPanel toast={toast} />}
+      {activeTab === 'notifs'   && <NotificationPrefsPanel userId={session?.userId} role="user" />}
     </div>
   )
 }
@@ -510,31 +554,16 @@ function UserProfileForm({ session, toast }) {
   async function load() {
     setLoading(true)
     let u = null
-    if (session.userId) {
-      const { data } = await sb.from('users').select('*').eq('id', session.userId).maybeSingle()
-      u = data
-    }
-    if (!u) {
-      const { data } = await sb.from('users').select('*').eq('name', session.username).maybeSingle()
-      u = data
-    }
+    if (session.userId) { const { data } = await sb.from('users').select('*').eq('id', session.userId).maybeSingle(); u = data }
+    if (!u) { const { data } = await sb.from('users').select('*').eq('name', session.username).maybeSingle(); u = data }
     setUser(u)
-    if (u) setForm({
-      name: u.name||'', last_name: u.last_name||'', email: u.email||'', phone: u.phone||'',
-      degree: u.degree||'', year_semester: u.year_semester||'', supervisor: u.supervisor||'',
-      project_group: u.project_group||'', photo_url: u.photo_url||''
-    })
+    if (u) setForm({ name: u.name||'', last_name: u.last_name||'', email: u.email||'', phone: u.phone||'', degree: u.degree||'', year_semester: u.year_semester||'', supervisor: u.supervisor||'', project_group: u.project_group||'', photo_url: u.photo_url||'' })
     setLoading(false)
   }
 
   async function saveInfo() {
     setSaving(true)
-    const { error } = await sb.from('users').update({
-      name: form.name.trim(), last_name: form.last_name||null, email: form.email||null,
-      phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null,
-      supervisor: form.supervisor||null, project_group: form.project_group||null,
-      photo_url: form.photo_url||null
-    }).eq('id', user.id)
+    const { error } = await sb.from('users').update({ name: form.name.trim(), last_name: form.last_name||null, email: form.email||null, phone: form.phone||null, degree: form.degree||null, year_semester: form.year_semester||null, supervisor: form.supervisor||null, project_group: form.project_group||null, photo_url: form.photo_url||null }).eq('id', user.id)
     if (error) { toast('Error saving: ' + error.message); setSaving(false); return }
     setSession({ ...session, username: form.name.trim(), photoUrl: form.photo_url||null })
     toast('Profile saved ✓'); setSaving(false); load()
@@ -594,9 +623,7 @@ function UserProfileForm({ session, toast }) {
         <div>
           <div style={{ fontWeight: 700, fontSize: 20 }}>{displayName || user.name}</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
-            <span style={{ background: 'var(--surface2)', borderRadius: 99, padding: '3px 12px', fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>
-              {user.role === 'student' ? 'Student' : 'Staff'}
-            </span>
+            <span style={{ background: 'var(--surface2)', borderRadius: 99, padding: '3px 12px', fontSize: 12, fontFamily: 'var(--mono)', color: 'var(--text2)' }}>{user.role === 'student' ? 'Student' : 'Staff'}</span>
             {user.project_group && <span style={{ background: groupBg[user.project_group]||'#f0efe9', color: groupColor[user.project_group]||'#6b6860', borderRadius: 99, padding: '3px 12px', fontSize: 12, fontWeight: 600 }}>{user.project_group}</span>}
           </div>
         </div>
@@ -660,10 +687,7 @@ function UserProfileForm({ session, toast }) {
             {form.photo_url && (
               <button className="btn btn-sm" onClick={async () => {
                 await sb.from('users').update({ photo_url: null }).eq('id', user.id)
-                setForm(f => ({ ...f, photo_url: '' }))
-                setUser(u => ({ ...u, photo_url: null }))
-                setSession({ ...session, photoUrl: null })
-                toast('Photo removed.')
+                setForm(f => ({ ...f, photo_url: '' })); setUser(u => ({ ...u, photo_url: null })); setSession({ ...session, photoUrl: null }); toast('Photo removed.')
               }}>Remove</button>
             )}
           </div>
@@ -671,9 +695,7 @@ function UserProfileForm({ session, toast }) {
             <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>Upload a photo</div>
             <div style={{ fontSize: 12, color: 'var(--text3)', marginBottom: 10 }}>Saves automatically.</div>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => uploadPhoto(e.target.files[0])} />
-            <button className="btn btn-sm btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>
-              {uploading ? '⏳ Uploading…' : '⬆️ Choose photo'}
-            </button>
+            <button className="btn btn-sm btn-primary" onClick={() => fileRef.current?.click()} disabled={uploading}>{uploading ? '⏳ Uploading…' : '⬆️ Choose photo'}</button>
           </div>
         </div>
       )}
@@ -694,15 +716,31 @@ function UserProfileForm({ session, toast }) {
   )
 }
 
+// ══════════════════════════════════════════════════════════════
+// STUDENT PROFILE — own info + notifications tab
+// ══════════════════════════════════════════════════════════════
 function UserProfile({ session }) {
   const { toast } = useAppStore()
+  const [activeTab, setActiveTab] = useState('info')
   return (
     <div style={{ maxWidth: 640, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div className="section-title">My Profile</div>
         <HelpPanel screen="profile" />
       </div>
-      <UserProfileForm session={session} toast={toast} />
+      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 24, overflowX: 'auto' }}>
+        {[
+          { key: 'info',   label: '👤 My Info' },
+          { key: 'notifs', label: '🔔 Notifications' },
+        ].map(t => (
+          <button key={t.key} onClick={() => setActiveTab(t.key)}
+            style={{ padding: '10px 24px', border: 'none', background: 'transparent', fontFamily: 'var(--sans)', fontSize: 14, fontWeight: 500, cursor: 'pointer', color: activeTab === t.key ? 'var(--accent)' : 'var(--text2)', borderBottom: `2px solid ${activeTab === t.key ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', whiteSpace: 'nowrap' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {activeTab === 'info'   && <UserProfileForm session={session} toast={toast} />}
+      {activeTab === 'notifs' && <NotificationPrefsPanel userId={session?.userId} role="student" />}
     </div>
   )
 }
@@ -714,7 +752,6 @@ export default function Profile() {
   return <UserProfile session={session} />
 }
 
-// ── ACCESS CONTROL — now includes PM and Profile icons ──
 function AccessControl({ toast }) {
   const ALL_SCREENS = [
     { key: 'home',        label: 'Supply Inventory',    icon: '📦' },
@@ -734,37 +771,24 @@ function AccessControl({ toast }) {
   const [access, setAccess] = useState({})
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-
   useEffect(() => { loadUsers() }, [])
   useEffect(() => { if (selected) loadAccess(selected.id) }, [selected])
-
-  async function loadUsers() {
-    setLoading(true)
-    const { data } = await sb.from('users').select('id, name, role').eq('role', 'user').eq('is_active', true).order('name')
-    setUsers(data || [])
-    setLoading(false)
-  }
-
+  async function loadUsers() { setLoading(true); const { data } = await sb.from('users').select('id, name, role').eq('role', 'user').eq('is_active', true).order('name'); setUsers(data || []); setLoading(false) }
   async function loadAccess(userId) {
     const { data } = await sb.from('user_screen_access').select('screen_key').eq('user_id', userId)
     const map = {}
-    if (data?.length) { data.forEach(r => { map[r.screen_key] = true }) }
-    else { ALL_SCREENS.forEach(s => { map[s.key] = true }) }
+    if (data?.length) { data.forEach(r => { map[r.screen_key] = true }) } else { ALL_SCREENS.forEach(s => { map[s.key] = true }) }
     setAccess(map)
   }
-
   async function saveAccess() {
     if (!selected) return
     setSaving(true)
     await sb.from('user_screen_access').delete().eq('user_id', selected.id)
     const rows = Object.entries(access).filter(([, v]) => v).map(([key]) => ({ user_id: selected.id, screen_key: key }))
     if (rows.length) await sb.from('user_screen_access').insert(rows)
-    toast('Access updated ✓')
-    setSaving(false)
+    toast('Access updated ✓'); setSaving(false)
   }
-
   if (loading) return <div style={{ textAlign: 'center', padding: 32 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-
   return (
     <div className="card">
       <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>🗂️ Module Access per Staff Member</div>
@@ -811,24 +835,18 @@ function IconImageManager({ toast }) {
   const [images, setImages] = useState({})
   const [uploading, setUploading] = useState(null)
   const fileRefs = useRef({})
-
   useEffect(() => { loadImages() }, [])
-
   async function loadImages() {
     const keys = ALL_MODULES.map(m => `img_${m.key}`)
     const { data } = await sb.from('settings').select('key, value').in('key', keys)
-    const map = {}
-    ;(data || []).forEach(r => { map[r.key.replace('img_', '')] = r.value })
-    setImages(map)
+    const map = {}; (data || []).forEach(r => { map[r.key.replace('img_', '')] = r.value }); setImages(map)
   }
-
   async function uploadImage(moduleKey, file) {
     if (!file?.type.startsWith('image/')) { toast('Please select an image file.'); return }
     setUploading(moduleKey)
     try {
       const compressed = await new Promise(resolve => {
-        const img = new Image()
-        const url = URL.createObjectURL(file)
+        const img = new Image(); const url = URL.createObjectURL(file)
         img.onload = () => {
           const scale = Math.min(1, 800 / img.width, 500 / img.height)
           const canvas = document.createElement('canvas')
@@ -848,13 +866,10 @@ function IconImageManager({ toast }) {
     } catch { toast('Upload failed.') }
     setUploading(null)
   }
-
   async function removeImage(moduleKey) {
     await sb.from('settings').delete().eq('key', `img_${moduleKey}`)
-    setImages(prev => { const n = { ...prev }; delete n[moduleKey]; return n })
-    toast('Image removed.')
+    setImages(prev => { const n = { ...prev }; delete n[moduleKey]; return n }); toast('Image removed.')
   }
-
   return (
     <div>
       <div className="card" style={{ marginBottom: 20 }}>
@@ -879,16 +894,12 @@ function IconImageManager({ toast }) {
                     {uploading === m.key ? '⏳ Uploading…' : '📷 Click to upload'}
                   </div>
                 </div>
-                <input ref={el => fileRefs.current[m.key] = el} type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => { if (e.target.files[0]) uploadImage(m.key, e.target.files[0]) }} />
+                <input ref={el => fileRefs.current[m.key] = el} type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { if (e.target.files[0]) uploadImage(m.key, e.target.files[0]) }} />
               </div>
               <div style={{ padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.icon} {m.label}</div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 10px' }}
-                    onClick={() => fileRefs.current[m.key]?.click()} disabled={uploading === m.key}>
-                    {uploading === m.key ? '⏳' : img ? 'Change' : 'Upload'}
-                  </button>
+                  <button className="btn btn-sm" style={{ fontSize: 11, padding: '3px 10px' }} onClick={() => fileRefs.current[m.key]?.click()} disabled={uploading === m.key}>{uploading === m.key ? '⏳' : img ? 'Change' : 'Upload'}</button>
                   {img && <button className="btn btn-sm btn-danger" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => removeImage(m.key)}>x</button>}
                 </div>
               </div>

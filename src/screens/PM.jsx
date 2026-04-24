@@ -188,20 +188,11 @@ function MiniCalendar({ tasks, onDayClick }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════
-// TASK DETAIL MODAL — editable dates, renamed section title
-// ══════════════════════════════════════════════════════════════
 function TaskModal({ task, onClose, onUpdate, currentUserId, currentUserName }) {
   const [localTask, setLocalTask] = useState(task)
   const [saving, setSaving] = useState(false)
   const { toast } = useAppStore()
-
-  const statusStyle = (s) => ({
-    todo:        { background: '#f1f1f1', color: '#555' },
-    in_progress: { background: ORANGE_LIGHT, color: ORANGE },
-    done:        { background: '#e8f5e9', color: '#2e7d32' },
-  }[s] || {})
-
+  const statusStyle = (s) => ({ todo: { background: '#f1f1f1', color: '#555' }, in_progress: { background: ORANGE_LIGHT, color: ORANGE }, done: { background: '#e8f5e9', color: '#2e7d32' } }[s] || {})
   const cycleStatus = async () => {
     const next = { todo: 'in_progress', in_progress: 'done', done: 'todo' }
     const newStatus = next[localTask.status]
@@ -209,50 +200,28 @@ function TaskModal({ task, onClose, onUpdate, currentUserId, currentUserName }) 
     const updated = { ...localTask, status: newStatus }
     setLocalTask(updated); onUpdate(updated)
   }
-
   const updateProgress = async (val) => {
     await sb.from('tasks').update({ progress: val }).eq('id', localTask.id)
     const updated = { ...localTask, progress: val }
     setLocalTask(updated); onUpdate(updated)
   }
-
-  // Save notes + dates together
   const saveDetails = async () => {
     setSaving(true)
-    await sb.from('tasks').update({
-      notes: localTask.notes,
-      start_date: localTask.start_date || null,
-      deadline: localTask.deadline || null,
-    }).eq('id', localTask.id)
-    onUpdate(localTask)
-    setSaving(false)
-    toast('Task details saved!')
+    await sb.from('tasks').update({ notes: localTask.notes, start_date: localTask.start_date || null, deadline: localTask.deadline || null }).eq('id', localTask.id)
+    onUpdate(localTask); setSaving(false); toast('Task details saved!')
   }
-
   const color = progressColor(localTask.progress || 0)
-
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: 'var(--surface)', borderRadius: 18, border: '1px solid var(--border)', width: '100%', maxWidth: 540, maxHeight: '92vh', overflowY: 'auto', padding: 26 }}>
-
-        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
           <div style={{ fontWeight: 700, fontSize: 17, flex: 1, paddingRight: 12, lineHeight: 1.3 }}>{localTask.title}</div>
           <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text3)', lineHeight: 1 }}>×</button>
         </div>
-
-        {/* Status + Progress badges */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 18, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button onClick={cycleStatus}
-            style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, fontWeight: 600, border: 'none', cursor: 'pointer', ...statusStyle(localTask.status) }}>
-            {localTask.status.replace('_', ' ')} ↻
-          </button>
-          <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, background: '#e8f0fe', color: BLUE, fontWeight: 600 }}>
-            {localTask.progress || 0}% complete
-          </span>
+          <button onClick={cycleStatus} style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, fontWeight: 600, border: 'none', cursor: 'pointer', ...statusStyle(localTask.status) }}>{localTask.status.replace('_', ' ')} ↻</button>
+          <span style={{ fontSize: 11, padding: '4px 12px', borderRadius: 20, background: '#e8f0fe', color: BLUE, fontWeight: 600 }}>{localTask.progress || 0}% complete</span>
         </div>
-
-        {/* Progress tape */}
         <div style={{ background: 'var(--surface2)', borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>
           <ProgressTape progress={localTask.progress || 0} />
           <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -264,51 +233,27 @@ function TaskModal({ task, onClose, onUpdate, currentUserId, currentUserName }) 
             ))}
           </div>
         </div>
-
-        {/* ── Task detail section (renamed from Notes, now includes editable dates) ── */}
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
-            📋 Task detail
-          </div>
-
-          {/* Editable dates */}
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)', marginBottom: 12, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>📋 Task detail</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Start date</label>
-              <input type="date" value={localTask.start_date || ''}
-                onChange={e => setLocalTask({ ...localTask, start_date: e.target.value })} />
+              <input type="date" value={localTask.start_date || ''} onChange={e => setLocalTask({ ...localTask, start_date: e.target.value })} />
             </div>
             <div className="field" style={{ marginBottom: 0 }}>
               <label>Deadline</label>
-              <input type="date" value={localTask.deadline || ''}
-                onChange={e => setLocalTask({ ...localTask, deadline: e.target.value })} />
+              <input type="date" value={localTask.deadline || ''} onChange={e => setLocalTask({ ...localTask, deadline: e.target.value })} />
             </div>
           </div>
-
-          {/* Notes */}
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Notes</label>
             <textarea rows={3} style={{ resize: 'vertical', width: '100%', boxSizing: 'border-box', fontSize: 13 }}
-              value={localTask.notes || ''}
-              onChange={e => setLocalTask({ ...localTask, notes: e.target.value })}
-              placeholder="Add notes about this task…" />
+              value={localTask.notes || ''} onChange={e => setLocalTask({ ...localTask, notes: e.target.value })} placeholder="Add notes about this task…" />
           </div>
-
-          <button className="btn btn-primary" style={{ marginTop: 10, fontSize: 12, padding: '6px 16px' }} onClick={saveDetails} disabled={saving}>
-            {saving ? 'Saving…' : 'Save details'}
-          </button>
+          <button className="btn btn-primary" style={{ marginTop: 10, fontSize: 12, padding: '6px 16px' }} onClick={saveDetails} disabled={saving}>{saving ? 'Saving…' : 'Save details'}</button>
         </div>
-
-        {/* Divider */}
         <div style={{ borderTop: '1px solid var(--border)', marginBottom: 16 }} />
-
-        {/* Comments */}
-        <TaskComments
-          taskId={localTask.id}
-          currentUserId={currentUserId}
-          currentUserName={currentUserName}
-          assignedTo={localTask.assigned_to}
-        />
+        <TaskComments taskId={localTask.id} currentUserId={currentUserId} currentUserName={currentUserName} assignedTo={localTask.assigned_to} />
       </div>
     </div>
   )
@@ -807,54 +752,6 @@ function Chat({ userId }) {
   )
 }
 
-export function NotificationPrefs({ userId }) {
-  const [prefs, setPrefs] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const { toast } = useAppStore()
-  useEffect(() => { if (userId) load() }, [userId])
-  async function load() {
-    const { data } = await sb.from('notification_prefs').select('*').eq('user_id', userId).maybeSingle()
-    setPrefs(data || { task_comment: true, task_assigned: true, meeting_added: true, email_task_comment: false, email_task_assigned: false, email_meeting_added: false })
-    setLoading(false)
-  }
-  async function save() {
-    setSaving(true)
-    await sb.from('notification_prefs').upsert({ ...prefs, user_id: userId })
-    toast('Notification preferences saved ✓')
-    setSaving(false)
-  }
-  if (!userId) return <div style={{ fontSize: 13, color: 'var(--text3)' }}>Log in to manage notification preferences.</div>
-  if (loading) return <div style={{ padding: 16 }}><div className="spinner" style={{ margin: '0 auto' }} /></div>
-  const events = [
-    { key: 'task_comment', label: 'New comment on my task' },
-    { key: 'task_assigned', label: 'Task assigned to me' },
-    { key: 'meeting_added', label: 'New meeting task assigned' },
-  ]
-  return (
-    <div>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>🔔 Notification Preferences</div>
-      <div style={{ fontSize: 13, color: 'var(--text2)', marginBottom: 20 }}>Choose how you want to be notified for each event.</div>
-      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', padding: '10px 16px', background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Event</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>In-app 🔔</div>
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>Email 📧</div>
-        </div>
-        {events.map(ev => (
-          <div key={ev.key} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', padding: '14px 16px', borderBottom: '1px solid var(--surface2)', alignItems: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>{ev.label}</div>
-            <div style={{ textAlign: 'center' }}><input type="checkbox" checked={!!prefs[ev.key]} onChange={e => setPrefs({ ...prefs, [ev.key]: e.target.checked })} style={{ width: 'auto', cursor: 'pointer', transform: 'scale(1.2)' }} /></div>
-            <div style={{ textAlign: 'center' }}><input type="checkbox" checked={!!prefs[`email_${ev.key}`]} onChange={e => setPrefs({ ...prefs, [`email_${ev.key}`]: e.target.checked })} style={{ width: 'auto', cursor: 'pointer', transform: 'scale(1.2)' }} /></div>
-          </div>
-        ))}
-      </div>
-      <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>Email notifications require email setup — contact your admin to configure.</div>
-      <button className="btn btn-primary" style={{ marginTop: 14 }} onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save preferences'}</button>
-    </div>
-  )
-}
-
 export default function PM() {
   const { session } = useAppStore()
   const [activeTab, setActiveTab] = useState('tasks')
@@ -863,11 +760,10 @@ export default function PM() {
   const isAdmin = session?.role === 'admin' || session?.role === 'user'
   const userName = session?.username || 'Staff'
   const tabs = [
-    { key: 'tasks', label: 'My Tasks' },
-    { key: 'team', label: 'Team' },
+    { key: 'tasks',    label: 'My Tasks' },
+    { key: 'team',     label: 'Team' },
     { key: 'meetings', label: 'Meetings' },
-    { key: 'chat', label: 'Chat' },
-    { key: 'notifs', label: '🔔 Notifications' },
+    { key: 'chat',     label: 'Chat' },
     ...(session?.role === 'admin' ? [{ key: 'assign', label: 'Assign others' }] : [])
   ]
   return (
@@ -888,7 +784,6 @@ export default function PM() {
       {activeTab === 'team'     && <Team />}
       {activeTab === 'meetings' && <Meetings userId={userId} isAdmin={isAdmin} />}
       {activeTab === 'chat'     && <Chat userId={userId} />}
-      {activeTab === 'notifs'   && <NotificationPrefs userId={userId} />}
       {activeTab === 'assign'   && session?.role === 'admin' && <AssignOthers userId={userId} />}
     </div>
   )
